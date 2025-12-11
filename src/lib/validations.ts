@@ -47,7 +47,20 @@ export const expenseApprovalSchema = z.object({
   status: z.enum(['approved', 'rejected']),
   notes: z.string().optional(),
   rejection_reason: z.string().optional(),
-});
+}).refine(
+  (data) => {
+    // If status is rejected, require rejection_reason or notes
+    if (data.status === 'rejected') {
+      return (data.rejection_reason && data.rejection_reason.length > 0) || 
+             (data.notes && data.notes.length > 0);
+    }
+    return true;
+  },
+  {
+    message: 'Rejection reason or notes is required when rejecting an expense',
+    path: ['rejection_reason'],
+  }
+);
 
 // Filter validations
 export const expenseFiltersSchema = z. object({

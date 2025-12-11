@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
 
       default:
         return NextResponse.json(
-          { success: false, error: `Invalid report type: ${type}` },
+          { success: false, error: 'Invalid report type' },
           { status: 400 }
         );
     }

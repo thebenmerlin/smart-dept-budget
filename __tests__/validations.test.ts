@@ -120,6 +120,28 @@ describe('Expense Validations', () => {
       const result = validateRequest(expenseApprovalSchema, validApproval);
       expect(result.success).toBe(true);
     });
+
+    it('should reject rejection without reason or notes', () => {
+      const invalidRejection = {
+        status: 'rejected',
+      };
+
+      const result = validateRequest(expenseApprovalSchema, invalidRejection);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toContain('reason');
+      }
+    });
+
+    it('should accept rejection with notes only', () => {
+      const validRejection = {
+        status: 'rejected',
+        notes: 'Does not meet criteria',
+      };
+
+      const result = validateRequest(expenseApprovalSchema, validRejection);
+      expect(result.success).toBe(true);
+    });
   });
 });
 

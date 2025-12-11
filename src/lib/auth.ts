@@ -11,27 +11,24 @@ export interface User {
   id: number;
   department_id: number;
   name: string;
-  email:  string;
+  email: string;
   role: 'admin' | 'hod' | 'staff';
-  is_active:  boolean;
+  is_active: boolean;
 }
 
 export interface Session {
   user:  User;
-  expires:  Date;
+  expires: Date;
 }
 
-// Hash password
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
-// Verify password
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
 
-// Create JWT token
 export async function createToken(user: User): Promise<string> {
   const token = await new SignJWT({
     userId: user.id,
@@ -47,8 +44,7 @@ export async function createToken(user: User): Promise<string> {
   return token;
 }
 
-// Verify JWT token
-export async function verifyToken(token: string): Promise<any> {
+export async function verifyToken(token:  string): Promise<any> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     return payload;
@@ -57,11 +53,10 @@ export async function verifyToken(token: string): Promise<any> {
   }
 }
 
-// Login user
 export async function loginUser(
   email: string,
   password: string
-): Promise<{ success: boolean; user?:  User; token?: string; error?: string }> {
+): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
   try {
     const users = await sql`
       SELECT id, department_id, name, email, password_hash, role, is_active
@@ -85,39 +80,37 @@ export async function loginUser(
       return { success: false, error: 'Invalid email or password' };
     }
 
-    // Update last login
     await sql`UPDATE users SET last_login = NOW() WHERE id = ${user.id}`;
 
     const userData:  User = {
       id: user.id,
       department_id: user.department_id,
       name: user.name,
-      email: user.email,
-      role: user.role,
+      email:  user.email,
+      role: user. role,
       is_active: user.is_active,
     };
 
     const token = await createToken(userData);
 
-    // Store session in database
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await sql`
       INSERT INTO sessions (user_id, token, expires_at)
       VALUES (${user.id}, ${token}, ${expiresAt. toISOString()})
     `;
 
-    return { success: true, user:  userData, token };
+    return { success:  true, user: userData, token };
   } catch (error) {
     console.error('Login error:', error);
     return { success: false, error: 'An error occurred during login' };
   }
 }
 
-// Get current user from request
+// THIS IS THE KEY FIX - use user_id not session.id
 export async function getCurrentUser(): Promise<User | null> {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('auth_token')?.value;
+    const token = cookieStore. get('auth_token')?.value;
 
     if (!token) {
       return null;
@@ -129,9 +122,17 @@ export async function getCurrentUser(): Promise<User | null> {
       return null;
     }
 
-    // Verify session exists and not expired
+    // Get user data with proper field aliases
     const sessions = await sql`
-      SELECT s.*, u.id, u.department_id, u. name, u.email, u.role, u.is_active
+      SELECT 
+        s.id as session_id,
+        s.user_id,
+        u.id as user_id,
+        u.department_id,
+        u.name,
+        u.email,
+        u.role,
+        u. is_active
       FROM sessions s
       JOIN users u ON u.id = s. user_id
       WHERE s.token = ${token} AND s.expires_at > NOW() AND u.is_active = true
@@ -143,8 +144,9 @@ export async function getCurrentUser(): Promise<User | null> {
 
     const session = sessions[0];
 
+    // FIX: Use user_id, not session.id
     return {
-      id: session.id,
+      id: session.user_id,
       department_id: session.department_id,
       name: session.name,
       email:  session.email,
@@ -157,7 +159,6 @@ export async function getCurrentUser(): Promise<User | null> {
   }
 }
 
-// Logout user
 export async function logoutUser(token: string): Promise<void> {
   try {
     await sql`DELETE FROM sessions WHERE token = ${token}`;
@@ -166,15 +167,10 @@ export async function logoutUser(token: string): Promise<void> {
   }
 }
 
-// Check role permissions
-export function hasPermission(
-  userRole: string,
-  requiredRoles: string[]
-): boolean {
+export function hasPermission(userRole: string, requiredRoles: string[]): boolean {
   return requiredRoles. includes(userRole);
 }
 
-// Role hierarchy
 export const ROLE_PERMISSIONS = {
   admin: ['create', 'read', 'update', 'delete', 'approve', 'manage_users', 'manage_budgets', 'view_reports', 'download_reports'],
   hod: ['create', 'read', 'update', 'approve', 'manage_budgets', 'view_reports', 'download_reports'],

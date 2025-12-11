@@ -1,9 +1,9 @@
 // Mock data for demo mode (no DB connection required)
 
 export const mockUsers = [
-  { id: 1, name: 'Dr. Rajesh Kumar', email: 'admin@rscoe.edu.in', role: 'admin', department: 'CSBS' },
-  { id: 2, name: 'Prof. Sneha Patil', email: 'hod@rscoe.edu.in', role: 'hod', department: 'CSBS' },
-  { id: 3, name: 'Mr. Amit Sharma', email:  'staff@rscoe.edu.in', role: 'staff', department: 'CSBS' },
+  { id: 1, name: 'Admin', email: 'admin@rscoe.edu.in', role: 'admin', department: 'CSBS' },
+  { id: 2, name: 'Dr. Kavita Moholkar', email: 'hod@rscoe.edu.in', role: 'hod', department: 'CSBS' },
+  { id: 3, name: 'CSBS Staff', email:  'staff@rscoe.edu.in', role: 'staff', department: 'CSBS' },
 ];
 
 export const mockCategories = [

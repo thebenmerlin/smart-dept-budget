@@ -5,6 +5,8 @@ import { createAuditLog } from '@/lib/audit';
 import { budgetPlanSchema, validateRequest } from '@/lib/validations';
 import { getCurrentFiscalYear } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 // GET - List all budgets with variance calculation
 export async function GET(request: NextRequest) {
   try {

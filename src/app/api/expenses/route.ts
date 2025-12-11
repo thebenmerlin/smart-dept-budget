@@ -4,6 +4,8 @@ import { getCurrentUser, canPerformAction } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { expenseSchema, validateRequest } from '@/lib/validations';
 
+export const dynamic = 'force-dynamic';
+
 // GET - List expenses with filters
 export async function GET(request: NextRequest) {
   try {

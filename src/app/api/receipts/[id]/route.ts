@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { deleteReceipt } from '@/lib/cloudinary';
 
+export const dynamic = 'force-dynamic';
+
 // DELETE - Delete receipt
 export async function DELETE(
   request: NextRequest,

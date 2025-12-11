@@ -3,6 +3,8 @@ import { logoutUser, getCurrentUser } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();

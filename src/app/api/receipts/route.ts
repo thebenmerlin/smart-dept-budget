@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { uploadReceipt } from '@/lib/cloudinary';
 
+export const dynamic = 'force-dynamic';
+
 // GET - List receipts
 export async function GET(request:  NextRequest) {
   try {

@@ -3,6 +3,8 @@ import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { getCurrentFiscalYear } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();

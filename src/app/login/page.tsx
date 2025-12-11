@@ -19,11 +19,11 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.success) {
         router.push('/');
       } else {
-        setError('Invalid email or password.  Try demo credentials below.');
+        setError(result.error || 'Invalid email or password.  Try demo credentials below.');
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
@@ -106,7 +106,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e. target.value)}
-                placeholder="you@rscoe.edu.in"
+                placeholder="you@rscoe.edu. in"
                 required
               />
 
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   <input type="checkbox" className="rounded border-slate-300" />
                   Remember me
                 </label>
-                <a href="#" className="text-brandNavy hover:underline">Forgot password?</a>
+                <a href="#" className="text-brandNavy hover:underline">Forgot password? </a>
               </div>
 
               <Button type="submit" className="w-full" size="lg" isLoading={isLoading}>
@@ -132,9 +132,9 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
+            {/* Demo Credentials - FIXED PASSWORD */}
             <div className="mt-8 pt-6 border-t border-slate-200">
-              <p className="text-xs text-slate-500 text-center mb-3">Demo Credentials (use any password with 4+ chars)</p>
+              <p className="text-xs text-slate-500 text-center mb-3">Demo Credentials (click to autofill)</p>
               <div className="space-y-2">
                 {[
                   { email: 'admin@rscoe.edu.in', role: 'Admin' },
@@ -146,17 +146,18 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => {
                       setEmail(cred.email);
-                      setPassword('demo1234');
+                      setPassword('Admin@123');
                     }}
                     className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors text-sm"
                   >
-                    <span className="text-slate-600">{cred. email}</span>
+                    <span className="text-slate-600">{cred.email}</span>
                     <span className="text-xs font-medium text-brandNavy bg-brandNavy/10 px-2 py-0.5 rounded">
                       {cred.role}
                     </span>
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-slate-400 text-center mt-3">Password:  Admin@123</p>
             </div>
           </div>
 

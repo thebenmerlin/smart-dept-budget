@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env. JWT_SECRET || 'fallback-secret-change-in-production'
+  process.env.JWT_SECRET || 'fallback-secret-change-in-production'
 );
 
 export interface User {
@@ -18,14 +18,14 @@ export interface User {
 
 export interface Session {
   user:  User;
-  expires: Date;
+  expires:  Date;
 }
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(password:  string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
 
@@ -99,14 +99,13 @@ export async function loginUser(
       VALUES (${user.id}, ${token}, ${expiresAt. toISOString()})
     `;
 
-    return { success:  true, user: userData, token };
+    return { success:  true, user:  userData, token };
   } catch (error) {
     console.error('Login error:', error);
     return { success: false, error: 'An error occurred during login' };
   }
 }
 
-// THIS IS THE KEY FIX - use user_id not session.id
 export async function getCurrentUser(): Promise<User | null> {
   try {
     const cookieStore = await cookies();
@@ -122,31 +121,30 @@ export async function getCurrentUser(): Promise<User | null> {
       return null;
     }
 
-    // Get user data with proper field aliases
+    // FIX: Use proper column aliases to get user_id correctly
     const sessions = await sql`
       SELECT 
         s.id as session_id,
-        s.user_id,
-        u.id as user_id,
+        s.user_id as user_id,
         u.department_id,
         u.name,
         u.email,
-        u.role,
-        u. is_active
+        u. role,
+        u.is_active
       FROM sessions s
       JOIN users u ON u.id = s. user_id
       WHERE s.token = ${token} AND s.expires_at > NOW() AND u.is_active = true
     `;
 
-    if (sessions. length === 0) {
+    if (sessions.length === 0) {
       return null;
     }
 
     const session = sessions[0];
 
-    // FIX: Use user_id, not session.id
+    // FIX: Use user_id from the query, not session.id
     return {
-      id: session.user_id,
+      id:  session.user_id,
       department_id: session.department_id,
       name: session.name,
       email:  session.email,

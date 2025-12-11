@@ -13,102 +13,273 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
+        { success: false, error:  'Unauthorized' },
         { status: 401 }
       );
     }
 
     if (!canPerformAction(user.role, 'download_reports')) {
       return NextResponse.json(
-        { success: false, error: 'Permission denied' },
+        { success: false, error:  'Permission denied' },
         { status: 403 }
       );
     }
 
     const body = await request.json();
-    const { type, fiscal_year, format = 'pdf' } = body;
+    const { type, fiscal_year, start_date, end_date, format = 'pdf' } = body;
     const fiscalYear = fiscal_year || getCurrentFiscalYear();
 
-    // Get report data based on type
     let reportData: any[];
     let columns: any[];
     let title: string;
 
     switch (type) {
-      case 'summary':
-        const summaryData = await sql`
+      case 'monthly':  {
+        const monthlyData = await sql`
           SELECT 
+            TO_CHAR(expense_date, 'Mon YYYY') as month,
+            TO_CHAR(expense_date, 'YYYY-MM') as month_sort,
             c.name as category,
-            COALESCE(ba.allotted_amount, 0) as allotted,
-            COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) as spent,
-            COALESCE(ba.allotted_amount, 0) - COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) as remaining
-          FROM categories c
-          LEFT JOIN budget_allotments ba ON ba.category_id = c.id 
-            AND ba.fiscal_year = ${fiscalYear}
-            AND ba.department_id = ${user.department_id}
-          LEFT JOIN expenses e ON e.category_id = c.id 
-            AND e.department_id = ${user.department_id}
-          WHERE c.is_active = true
-          GROUP BY c.name, ba.allotted_amount
-          ORDER BY c.name
+            COUNT(*) as transactions,
+            SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as approved_amount,
+            SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_amount
+          FROM expenses e
+          JOIN categories c ON c. id = e.category_id
+          WHERE e.department_id = ${user.department_id}
+            ${start_date ? sql`AND e.expense_date >= ${start_date}` : sql``}
+            ${end_date ? sql`AND e.expense_date <= ${end_date}` : sql``}
+          GROUP BY TO_CHAR(expense_date, 'Mon YYYY'), TO_CHAR(expense_date, 'YYYY-MM'), c.name
+          ORDER BY month_sort DESC, c.name
         `;
-        
-        reportData = summaryData.map((row) => ({
+
+        reportData = monthlyData.map((row) => ({
+          month: row. month,
           category: row.category,
-          allotted: formatCurrency(Number(row.allotted)),
-          spent: formatCurrency(Number(row.spent)),
-          remaining: formatCurrency(Number(row.remaining)),
+          transactions: Number(row.transactions),
+          approved_amount: formatCurrency(Number(row.approved_amount)),
+          pending_amount: formatCurrency(Number(row.pending_amount)),
         }));
 
         columns = [
-          { key: 'category', header: 'Category', width: 150 },
-          { key: 'allotted', header: 'Allotted', width: 100, align: 'right' as const },
-          { key: 'spent', header: 'Spent', width: 100, align: 'right' as const },
-          { key: 'remaining', header: 'Remaining', width: 100, align: 'right' as const },
+          { key: 'month', header: 'Month', width: 100 },
+          { key: 'category', header: 'Category', width: 120 },
+          { key: 'transactions', header: 'Count', width: 60, align: 'right' as const },
+          { key: 'approved_amount', header: 'Approved', width: 100, align: 'right' as const },
+          { key:  'pending_amount', header: 'Pending', width:  100, align:  'right' as const },
         ];
 
-        title = `Budget Summary Report - FY ${fiscalYear}`;
+        title = `Monthly Expense Report - FY ${fiscalYear}`;
         break;
+      }
 
-      case 'expenses':
+      case 'category': {
+        const categoryData = await sql`
+          SELECT 
+            c.name as category,
+            COALESCE(bp.proposed_amount, 0) as proposed,
+            COALESCE(ba.allotted_amount, 0) as allotted,
+            COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) as spent,
+            COALESCE(SUM(CASE WHEN e.status = 'pending' THEN e.amount ELSE 0 END), 0) as pending
+          FROM categories c
+          LEFT JOIN budget_plans bp ON bp.category_id = c. id 
+            AND bp.fiscal_year = ${fiscalYear} AND bp.department_id = ${user.department_id}
+          LEFT JOIN budget_allotments ba ON ba.category_id = c.id 
+            AND ba. fiscal_year = ${fiscalYear} AND ba.department_id = ${user.department_id}
+          LEFT JOIN expenses e ON e.category_id = c.id AND e.department_id = ${user.department_id}
+          WHERE c.is_active = true
+          GROUP BY c.id, c.name, bp.proposed_amount, ba.allotted_amount
+          ORDER BY c.name
+        `;
+
+        reportData = categoryData.map((row) => {
+          const allotted = Number(row.allotted);
+          const spent = Number(row.spent);
+          const utilization = allotted > 0 ? ((spent / allotted) * 100).toFixed(1) + '%' : '0%';
+          return {
+            category:  row.category,
+            proposed: formatCurrency(Number(row.proposed)),
+            allotted: formatCurrency(allotted),
+            spent: formatCurrency(spent),
+            pending: formatCurrency(Number(row.pending)),
+            remaining: formatCurrency(allotted - spent),
+            utilization,
+          };
+        });
+
+        columns = [
+          { key: 'category', header: 'Category', width: 100 },
+          { key: 'proposed', header: 'Proposed', width:  80, align: 'right' as const },
+          { key:  'allotted', header: 'Allotted', width: 80, align: 'right' as const },
+          { key: 'spent', header:  'Spent', width: 80, align: 'right' as const },
+          { key: 'remaining', header: 'Remaining', width:  80, align:  'right' as const },
+          { key: 'utilization', header: 'Util %', width: 60, align: 'right' as const },
+        ];
+
+        title = `Category-wise Budget Report - FY ${fiscalYear}`;
+        break;
+      }
+
+      case 'budget':  {
+        const budgetData = await sql`
+          SELECT 
+            c.name as category,
+            COALESCE(bp.proposed_amount, 0) as proposed,
+            COALESCE(ba.allotted_amount, 0) as allotted,
+            COALESCE(ba.allotted_amount, 0) - COALESCE(bp.proposed_amount, 0) as variance
+          FROM categories c
+          LEFT JOIN budget_plans bp ON bp.category_id = c.id 
+            AND bp.fiscal_year = ${fiscalYear} AND bp.department_id = ${user.department_id}
+          LEFT JOIN budget_allotments ba ON ba. category_id = c.id 
+            AND ba.fiscal_year = ${fiscalYear} AND ba. department_id = ${user.department_id}
+          WHERE c.is_active = true
+          ORDER BY c.name
+        `;
+
+        reportData = budgetData.map((row) => {
+          const variance = Number(row. variance);
+          return {
+            category:  row.category,
+            proposed: formatCurrency(Number(row.proposed)),
+            allotted: formatCurrency(Number(row.allotted)),
+            variance:  (variance >= 0 ? '+' : '') + formatCurrency(variance),
+            status: variance >= 0 ? 'Surplus' : 'Deficit',
+          };
+        });
+
+        columns = [
+          { key: 'category', header: 'Category', width:  120 },
+          { key: 'proposed', header: 'Proposed', width:  100, align: 'right' as const },
+          { key:  'allotted', header: 'Allotted', width: 100, align: 'right' as const },
+          { key: 'variance', header:  'Variance', width: 100, align: 'right' as const },
+          { key:  'status', header: 'Status', width: 80 },
+        ];
+
+        title = `Budget Variance Report - FY ${fiscalYear}`;
+        break;
+      }
+
+      case 'vendor': {
+        const vendorData = await sql`
+          SELECT 
+            e.vendor,
+            COUNT(*) as transaction_count,
+            SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END) as total_approved,
+            SUM(CASE WHEN e.status = 'pending' THEN e.amount ELSE 0 END) as total_pending,
+            SUM(e.amount) as total_amount
+          FROM expenses e
+          WHERE e.department_id = ${user.department_id}
+            ${start_date ?  sql`AND e.expense_date >= ${start_date}` : sql``}
+            ${end_date ? sql`AND e.expense_date <= ${end_date}` : sql``}
+          GROUP BY e.vendor
+          ORDER BY total_amount DESC
+        `;
+
+        reportData = vendorData.map((row) => ({
+          vendor: row.vendor,
+          transactions: Number(row.transaction_count),
+          approved:  formatCurrency(Number(row.total_approved)),
+          pending: formatCurrency(Number(row.total_pending)),
+          total: formatCurrency(Number(row. total_amount)),
+        }));
+
+        columns = [
+          { key: 'vendor', header: 'Vendor/Payee', width: 150 },
+          { key: 'transactions', header: 'Count', width: 60, align: 'right' as const },
+          { key:  'approved', header: 'Approved', width: 100, align: 'right' as const },
+          { key:  'pending', header: 'Pending', width: 100, align: 'right' as const },
+          { key:  'total', header: 'Total', width: 100, align: 'right' as const },
+        ];
+
+        title = `Vendor-wise Expense Report - FY ${fiscalYear}`;
+        break;
+      }
+
+      case 'audit': {
+        const auditData = await sql`
+          SELECT 
+            al.created_at,
+            u.name as user_name,
+            al.action,
+            al. entity_type,
+            al.entity_id,
+            al. ip_address
+          FROM audit_logs al
+          LEFT JOIN users u ON u.id = al. user_id
+          WHERE 1=1
+            ${start_date ? sql`AND al.created_at >= ${start_date}` : sql``}
+            ${end_date ?  sql`AND al.created_at <= ${end_date}` : sql``}
+          ORDER BY al. created_at DESC
+          LIMIT 500
+        `;
+
+        reportData = auditData.map((row) => ({
+          timestamp: formatDate(row.created_at, 'dd MMM yyyy HH:mm'),
+          user: row.user_name || 'System',
+          action:  row.action,
+          entity_type:  row.entity_type,
+          entity_id: row.entity_id || '-',
+          ip_address: row.ip_address || '-',
+        }));
+
+        columns = [
+          { key: 'timestamp', header:  'Timestamp', width: 110 },
+          { key: 'user', header: 'User', width: 100 },
+          { key: 'action', header: 'Action', width:  100 },
+          { key: 'entity_type', header:  'Entity', width: 80 },
+          { key: 'entity_id', header:  'ID', width: 50 },
+          { key: 'ip_address', header:  'IP Address', width: 90 },
+        ];
+
+        title = `Audit Trail Report`;
+        break;
+      }
+
+      case 'summary':
+      case 'expenses':  {
         const expensesData = await sql`
           SELECT 
             e.expense_date,
             c.name as category,
             e.vendor,
-            e.description,
-            e.amount,
-            e.status
+            e. description,
+            e. amount,
+            e.status,
+            u.name as created_by
           FROM expenses e
           JOIN categories c ON c.id = e.category_id
+          LEFT JOIN users u ON u.id = e.created_by
           WHERE e.department_id = ${user.department_id}
-          ORDER BY e.expense_date DESC
+            ${start_date ? sql`AND e.expense_date >= ${start_date}` : sql``}
+            ${end_date ?  sql`AND e.expense_date <= ${end_date}` : sql``}
+          ORDER BY e. expense_date DESC
         `;
-        
+
         reportData = expensesData.map((row) => ({
-          expense_date: formatDate(row.expense_date, 'dd MMM yyyy'),
+          date: formatDate(row.expense_date, 'dd MMM yyyy'),
           category: row.category,
           vendor: row.vendor,
           description: row.description || '-',
           amount: formatCurrency(Number(row.amount)),
           status: row.status,
+          created_by:  row.created_by || '-',
         }));
 
         columns = [
-          { key: 'expense_date', header: 'Date', width: 80 },
-          { key: 'category', header: 'Category', width: 100 },
-          { key: 'vendor', header: 'Vendor', width: 100 },
-          { key: 'description', header: 'Description', width: 150 },
+          { key:  'date', header: 'Date', width: 80 },
+          { key: 'category', header: 'Category', width: 90 },
+          { key: 'vendor', header: 'Vendor', width:  100 },
+          { key: 'description', header:  'Description', width: 120 },
           { key: 'amount', header: 'Amount', width: 80, align: 'right' as const },
-          { key: 'status', header: 'Status', width: 70 },
+          { key: 'status', header:  'Status', width: 70 },
         ];
 
-        title = `Expenses Report - FY ${fiscalYear}`;
+        title = type === 'summary' ? `Budget Summary Report - FY ${fiscalYear}` : `Expenses Report - FY ${fiscalYear}`;
         break;
+      }
 
       default:
         return NextResponse.json(
-          { success: false, error: 'Invalid report type' },
+          { success:  false, error: `Invalid report type: ${type}` },
           { status: 400 }
         );
     }
@@ -118,7 +289,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       action: 'GENERATE_REPORT',
       entityType: 'report',
-      newValues: { type, format, fiscal_year: fiscalYear },
+      newValues: { type, format, fiscal_year:  fiscalYear },
     });
 
     // Generate report
@@ -128,7 +299,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse(csvContent, {
         status: 200,
         headers: {
-          'Content-Type': 'text/csv',
+          'Content-Type': 'text/csv; charset=utf-8',
           'Content-Disposition': `attachment; filename="${type}-report-${fiscalYear}.csv"`,
         },
       });
@@ -147,15 +318,15 @@ export async function POST(request: NextRequest) {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${type}-report-${fiscalYear}.pdf"`,
+          'Content-Disposition':  `attachment; filename="${type}-report-${fiscalYear}.pdf"`,
         },
       });
     }
   } catch (error) {
     console.error('Report download error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
+    return NextResponse. json(
+      { success: false, error: 'Failed to generate report.  Please try again.' },
+      { status:  500 }
     );
   }
 }

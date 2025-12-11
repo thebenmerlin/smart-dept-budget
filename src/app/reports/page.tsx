@@ -16,9 +16,9 @@ const reportTypes = [
     formats: ['pdf', 'csv'],
   },
   {
-    id:  'category',
+    id: 'category',
     title:  'Category-wise Budget Report',
-    description:  'Budget allocation, spending, and variance by category',
+    description: 'Budget allocation, spending, and variance by category',
     icon: '📁',
     formats:  ['pdf', 'csv'],
   },
@@ -27,18 +27,18 @@ const reportTypes = [
     title:  'Budget Variance Report',
     description: 'Proposed vs allotted budget comparison',
     icon:  '💰',
-    formats: ['pdf'],
-  },
-  {
-    id:  'vendor',
-    title:  'Vendor-wise Report',
-    description:  'Expenses grouped by vendor/payee',
-    icon: '🏢',
     formats:  ['pdf', 'csv'],
   },
   {
-    id:  'audit',
-    title:  'Audit Trail Report',
+    id: 'vendor',
+    title:  'Vendor-wise Report',
+    description:  'Expenses grouped by vendor/payee',
+    icon: '🏢',
+    formats: ['pdf', 'csv'],
+  },
+  {
+    id: 'audit',
+    title: 'Audit Trail Report',
     description: 'Complete log of all system activities',
     icon:  '🔍',
     formats: ['pdf', 'csv'],
@@ -83,24 +83,24 @@ export default function ReportsPage() {
         throw new Error(errorData.error || 'Failed to generate report');
       }
 
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `${reportType}-report-${fiscalYear}. ${format}`;
+      const contentDisposition = response. headers.get('Content-Disposition');
+      let filename = `${reportType}-report-${fiscalYear}.${format}`;
       if (contentDisposition) {
-        const match = contentDisposition.match(/filename="(.+)"/);
+        const match = contentDisposition. match(/filename="(. +)"/);
         if (match) filename = match[1];
       }
 
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const url = window. URL.createObjectURL(blob);
+      const a = document. createElement('a');
       a.href = url;
       a.download = filename;
-      document. body.appendChild(a);
+      document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setSuccessMessage(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} report downloaded successfully! `);
+      setSuccessMessage(`${reportType. charAt(0).toUpperCase() + reportType.slice(1)} report downloaded successfully! `);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err:  any) {
       setError(err.message || 'Failed to generate report');
@@ -121,7 +121,7 @@ export default function ReportsPage() {
         <div className="p-8 text-center rounded-xl border border-slate-200 bg-white">
           <h3 className="text-lg font-semibold text-slate-900 mb-2">Access Restricted</h3>
           <p className="text-slate-500">
-            Only HOD and Admin users can download reports.  Contact your administrator for access.
+            Only HOD and Admin users can download reports.  Contact your administrator for access. 
           </p>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md: flex-row md: items-center md: justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Reports and Exports</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -148,7 +148,7 @@ export default function ReportsPage() {
             <select
               value={fiscalYear}
               onChange={(e) => setFiscalYear(e.target. value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus: ring-brandNavy/50"
             >
               {getFiscalYearOptions().map((fy) => (
                 <option key={fy} value={fy}>FY {fy}</option>

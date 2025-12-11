@@ -5,6 +5,8 @@ import { createAuditLog } from '@/lib/audit';
 import { generatePDFReport, generateCSVReport } from '@/lib/pdf';
 import { getCurrentFiscalYear, formatCurrency, formatDate } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();

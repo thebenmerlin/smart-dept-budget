@@ -4,6 +4,8 @@ import { getCurrentUser, canPerformAction } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { budgetAllotmentSchema, validateRequest } from '@/lib/validations';
 
+export const dynamic = 'force-dynamic';
+
 // POST - Create/Update budget allotment (Admin/HOD only)
 export async function POST(request: NextRequest) {
   try {

@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const eventSchema = z. object({
   name: z.string().min(1).max(255),
   event_type: z. string().max(100).optional(),

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useApi } from './useApi';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCurrentFiscalYear } from '@/lib/utils';
 
 export interface BudgetItem {
@@ -9,9 +8,9 @@ export interface BudgetItem {
   category_name: string;
   category_description: string;
   proposed_amount: number;
-  allotted_amount:  number;
+  allotted_amount: number;
   spent_amount: number;
-  variance: number;
+  variance:  number;
   remaining:  number;
   utilization: number;
   plan_status: string | null;
@@ -24,62 +23,109 @@ export interface BudgetData {
   budgets: BudgetItem[];
   totals: {
     proposed: number;
-    allotted: number;
-    spent:  number;
+    allotted:  number;
+    spent: number;
     variance: number;
     remaining: number;
     utilization: number;
   };
 }
 
-export function useBudgets(fiscalYear?:  string) {
+export function useBudgets(fiscalYear?: string) {
   const [data, setData] = useState<BudgetData | null>(null);
-  const api = useApi<BudgetData>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const hasFetched = useRef(false);
 
   const fetchBudgets = useCallback(async () => {
-    const fy = fiscalYear || getCurrentFiscalYear();
-    const result = await api.get(`/api/budgets? fiscal_year=${fy}`);
-    if (result.success && result.data) {
-      setData(result.data);
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const fy = fiscalYear || getCurrentFiscalYear();
+      const response = await fetch(`/api/budgets?fiscal_year=${fy}`, {
+        credentials: 'include',
+      });
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setData(result.data);
+      } else {
+        setError(result.error || 'Failed to fetch budgets');
+      }
+    } catch (err) {
+      setError('Network error.  Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [fiscalYear, api]);
+  }, [fiscalYear]);
 
   useEffect(() => {
-    fetchBudgets();
+    if (! hasFetched. current) {
+      hasFetched. current = true;
+      fetchBudgets();
+    }
   }, [fetchBudgets]);
 
   const createPlan = async (categoryId: number, amount: number, justification?:  string) => {
-    const fy = fiscalYear || getCurrentFiscalYear();
-    const result = await api.post('/api/budgets', {
-      category_id: categoryId,
-      fiscal_year: fy,
-      proposed_amount: amount,
-      justification,
-    });
-    if (result.success) {
-      await fetchBudgets();
+    try {
+      const fy = fiscalYear || getCurrentFiscalYear();
+      const response = await fetch('/api/budgets', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          category_id: categoryId,
+          fiscal_year: fy,
+          proposed_amount: amount,
+          justification,
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        await fetchBudgets();
+      }
+      
+      return result;
+    } catch (err) {
+      return { success: false, error: 'Network error' };
     }
-    return result;
   };
 
   const createAllotment = async (categoryId: number, amount: number, notes?: string) => {
-    const fy = fiscalYear || getCurrentFiscalYear();
-    const result = await api.post('/api/budgets/allotments', {
-      category_id: categoryId,
-      fiscal_year:  fy,
-      allotted_amount:  amount,
-      notes,
-    });
-    if (result. success) {
-      await fetchBudgets();
+    try {
+      const fy = fiscalYear || getCurrentFiscalYear();
+      const response = await fetch('/api/budgets/allotments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials:  'include',
+        body: JSON. stringify({
+          category_id: categoryId,
+          fiscal_year: fy,
+          allotted_amount: amount,
+          notes,
+        }),
+      });
+      
+      const result = await response. json();
+      
+      if (result. success) {
+        await fetchBudgets();
+      }
+      
+      return result;
+    } catch (err) {
+      return { success:  false, error: 'Network error' };
     }
-    return result;
   };
 
   return {
     data,
-    isLoading: api.isLoading,
-    error: api.error,
+    isLoading,
+    error,
     refresh: fetchBudgets,
     createPlan,
     createAllotment,

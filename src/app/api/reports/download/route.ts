@@ -4,6 +4,7 @@ import { getCurrentUser, canPerformAction } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 import { generatePDFReport, generateCSVReport } from '@/lib/pdf';
 import { formatCurrency, formatDate, getCurrentFiscalYear } from '@/lib/utils';
+import { reportFiltersSchema, validateRequest } from '@/lib/validations';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Increase timeout for Vercel
@@ -27,14 +28,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { type, fiscal_year, start_date, end_date, format = 'pdf' } = body;
-
-    if (!type) {
+    
+    // Validate request body
+    const validation = validateRequest(reportFiltersSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Report type is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
+
+    const { type, fiscal_year, start_date, end_date, format = 'pdf' } = validation.data;
 
     const fiscalYear = fiscal_year || getCurrentFiscalYear();
 
@@ -289,7 +293,7 @@ export async function POST(request: NextRequest) {
 
       default: 
         return NextResponse.json(
-          { success: false, error: `Invalid report type: ${type}` },
+          { success: false, error: 'Invalid report type' },
           { status: 400 }
         );
     }

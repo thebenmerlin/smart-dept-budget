@@ -43,10 +43,24 @@ export const expenseSchema = z.object({
   invoice_number: z.string().max(100).optional(),
 });
 
-export const expenseApprovalSchema = z. object({
+export const expenseApprovalSchema = z.object({
   status: z.enum(['approved', 'rejected']),
-  rejection_reason: z. string().optional(),
-});
+  notes: z.string().optional(),
+  rejection_reason: z.string().optional(),
+}).refine(
+  (data) => {
+    // If status is rejected, require rejection_reason or notes
+    if (data.status === 'rejected') {
+      return (data.rejection_reason && data.rejection_reason.length > 0) || 
+             (data.notes && data.notes.length > 0);
+    }
+    return true;
+  },
+  {
+    message: 'Rejection reason or notes is required when rejecting an expense',
+    path: ['rejection_reason'],
+  }
+);
 
 // Filter validations
 export const expenseFiltersSchema = z. object({
@@ -59,11 +73,11 @@ export const expenseFiltersSchema = z. object({
 });
 
 // Report validations
-export const reportFiltersSchema = z. object({
-  type: z.enum(['monthly', 'category', 'budget', 'audit', 'vendor']),
-  fiscal_year: z. string().optional(),
-  start_date: z. string().optional(),
-  end_date:  z.string().optional(),
+export const reportFiltersSchema = z.object({
+  type: z.enum(['monthly', 'category', 'budget', 'audit', 'vendor', 'expenses', 'summary']),
+  fiscal_year: z.string().optional(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
   format: z.enum(['pdf', 'csv']).default('pdf'),
 });
 

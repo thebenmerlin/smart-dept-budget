@@ -43,6 +43,13 @@ const reportTypes = [
     icon:  '🔍',
     formats: ['pdf', 'csv'],
   },
+  {
+    id: 'expenses',
+    title: 'Detailed Expenses Report',
+    description: 'Complete list of all expenses with details',
+    icon: '📋',
+    formats: ['pdf', 'csv'],
+  },
 ];
 
 export default function ReportsPage() {

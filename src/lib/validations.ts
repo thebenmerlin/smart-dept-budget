@@ -43,9 +43,10 @@ export const expenseSchema = z.object({
   invoice_number: z.string().max(100).optional(),
 });
 
-export const expenseApprovalSchema = z. object({
+export const expenseApprovalSchema = z.object({
   status: z.enum(['approved', 'rejected']),
-  rejection_reason: z. string().optional(),
+  notes: z.string().optional(),
+  rejection_reason: z.string().optional(),
 });
 
 // Filter validations
@@ -59,11 +60,11 @@ export const expenseFiltersSchema = z. object({
 });
 
 // Report validations
-export const reportFiltersSchema = z. object({
-  type: z.enum(['monthly', 'category', 'budget', 'audit', 'vendor']),
-  fiscal_year: z. string().optional(),
-  start_date: z. string().optional(),
-  end_date:  z.string().optional(),
+export const reportFiltersSchema = z.object({
+  type: z.enum(['monthly', 'category', 'budget', 'audit', 'vendor', 'expenses', 'summary']),
+  fiscal_year: z.string().optional(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
   format: z.enum(['pdf', 'csv']).default('pdf'),
 });
 

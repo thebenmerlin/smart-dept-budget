@@ -1,10 +1,12 @@
-import { money, formatDate } from '../src/lib/utils';
+import { formatCurrency, formatDate } from '../src/lib/utils';
 
 describe('utils', () => {
-  test('money formats INR', () => {
-    expect(money(1234.56)).toContain('₹');
+  test('formatCurrency formats INR', () => {
+    expect(formatCurrency(1234.56)).toContain('₹');
+    expect(formatCurrency(1234.56)).toContain('1,234.56');
   });
-  test('formatDate outputs ISO', () => {
-    expect(formatDate('2024-01-02')).toBe('2024-01-02');
+  test('formatDate outputs formatted date', () => {
+    expect(formatDate('2024-01-02')).toBe('02 Jan 2024');
+    expect(formatDate('2024-01-02', 'yyyy-MM-dd')).toBe('2024-01-02');
   });
 });

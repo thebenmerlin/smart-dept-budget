@@ -1,57 +1,120 @@
 'use client';
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { mockUsers } from '../data/mock';
 
-type User = {
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+
+interface User {
   id: number;
+  department_id: number;
   name: string;
-  email: string;
+  email:  string;
   role: 'admin' | 'hod' | 'staff';
-  department: string;
-};
+  is_active: boolean;
+}
 
-type AuthContextType = {
-  user: User | null;
-  isAuthenticated: boolean;
+interface AuthContextType {
+  user:  User | null;
   isLoading: boolean;
-  login: (email: string, password:  string) => Promise<boolean>;
-  logout:  () => void;
-};
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  useEffect(() => {
-    // Check for saved session
-    const saved = localStorage.getItem('auth_user');
-    if (saved) {
-      setUser(JSON.parse(saved));
+  const refreshUser = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+
+      if (response. ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          setUser(data.user);
+          return;
+        }
+      }
+
+      setUser(null);
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+      setUser(null);
     }
-    setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Demo: accept any password for mock users
-    const found = mockUsers.find((u) => u.email. toLowerCase() === email.toLowerCase());
-    if (found && password. length >= 4) {
-      const userData = found as User;
-      setUser(userData);
-      localStorage.setItem('auth_user', JSON. stringify(userData));
-      return true;
+  useEffect(() => {
+    const initAuth = async () => {
+      setIsLoading(true);
+      await refreshUser();
+      setIsLoading(false);
+    };
+
+    initAuth();
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (! isLoading && ! user && pathname !== '/login') {
+      router.push('/login');
     }
-    return false;
+  }, [user, isLoading, pathname, router]);
+
+  const login = async (email: string, password:  string) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers:  { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response. json();
+
+      if (data.success && data.user) {
+        setUser(data.user);
+        router.push('/');
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || 'Login failed' };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'An error occurred during login' };
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('auth_user');
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console. error('Logout error:', error);
+    } finally {
+      setUser(null);
+      router.push('/login');
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -59,6 +122,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
   return context;
+}
+
+// Role check hooks
+export function useRole() {
+  const { user } = useAuth();
+  
+  return {
+    isAdmin: user?.role === 'admin',
+    isHOD: user?.role === 'hod',
+    isStaff: user?. role === 'staff',
+    canApprove: user?. role === 'admin' || user?.role === 'hod',
+    canManageBudgets: user?. role === 'admin' || user?.role === 'hod',
+    canDownloadReports: user?.role !== 'staff',
+  };
 }

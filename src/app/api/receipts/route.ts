@@ -1,41 +1,155 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cloudinary } from '../../../lib/cloudinary';
-import { sql } from '../../../lib/db';
-import { requireRole } from '../../../lib/rbac';
-import { logAudit } from '../../../lib/audit';
+import { sql } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
+import { uploadReceipt } from '@/lib/cloudinary';
 
-export async function POST(req: NextRequest) {
-  const roleCheck = await requireRole(req, ['admin', 'hod', 'staff']);
-  if (roleCheck) return roleCheck;
+// GET - List receipts
+export async function GET(request:  NextRequest) {
+  try {
+    const user = await getCurrentUser();
 
-  const form = await req.formData();
-  const file = form.get('file');
-  const expenseId = form.get('expense_id');
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
-  if (!(file instanceof File) || !expenseId) {
-    return NextResponse.json({ error: 'file and expense_id required' }, { status: 400 });
-  }
+    const { searchParams } = new URL(request.url);
+    const expenseId = searchParams.get('expense_id');
 
-  if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) {
-    return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 });
-  }
+    const receipts = await sql`
+      SELECT 
+        er.*,
+        e.description as expense_description,
+        e. amount as expense_amount,
+        e. vendor as expense_vendor,
+        c.name as category_name,
+        u.name as uploaded_by_name
+      FROM expense_receipts er
+      JOIN expenses e ON e.id = er. expense_id
+      JOIN categories c ON c.id = e.category_id
+      LEFT JOIN users u ON u.id = er. uploaded_by
+      WHERE e.department_id = ${user.department_id}
+        ${expenseId ?  sql`AND er.expense_id = ${parseInt(expenseId)}` : sql``}
+      ORDER BY er.created_at DESC
+    `;
 
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const upload = await new Promise<any>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { resource_type: 'auto', folder: 'dept-budget/receipts' },
-      (error, result) => (error ? reject(error) : resolve(result))
+    return NextResponse.json({
+      success: true,
+      data: receipts,
+    });
+  } catch (error) {
+    console.error('Receipts GET API error:', error);
+    return NextResponse.json(
+      { success:  false, error: 'Internal server error' },
+      { status: 500 }
     );
-    stream.end(buffer);
-  });
+  }
+}
 
-  await sql`
-    insert into expense_receipts (expense_id, public_id, url, mime_type, size_bytes)
-    values (${Number(expenseId)}, ${upload.public_id}, ${upload.secure_url}, ${file.type}, ${buffer.byteLength});
-  `;
+// POST - Upload receipt
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getCurrentUser();
 
-  await logAudit('upload', 'receipt', { expenseId, public_id: upload.public_id });
-  return NextResponse.json({ url: upload.secure_url, public_id: upload.public_id });
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Use the web standard FormData
+    const formData = await request.formData();
+    
+    // Access form fields using array notation to avoid TypeScript issues
+    const fileField = formData.getAll('file')[0];
+    const expenseIdField = formData.getAll('expense_id')[0];
+
+    // Validate file
+    if (!fileField || typeof fileField === 'string') {
+      return NextResponse.json(
+        { success: false, error: 'No file provided' },
+        { status: 400 }
+      );
+    }
+
+    // Cast to File type (we know it's a File from the check above)
+    const file = fileField as unknown as File;
+    const expenseId = expenseIdField?. toString();
+
+    if (!expenseId) {
+      return NextResponse. json(
+        { success: false, error: 'Expense ID is required' },
+        { status:  400 }
+      );
+    }
+
+    // Verify expense exists and belongs to user's department
+    const expense = await sql`
+      SELECT * FROM expenses 
+      WHERE id = ${parseInt(expenseId)} AND department_id = ${user.department_id}
+    `;
+
+    if (expense.length === 0) {
+      return NextResponse.json(
+        { success: false, error:  'Expense not found' },
+        { status: 404 }
+      );
+    }
+
+    // Convert file to buffer
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    // Upload to Cloudinary
+    const uploadResult = await uploadReceipt(buffer, file.name, file.type);
+
+    if (!uploadResult. success) {
+      return NextResponse.json(
+        { success: false, error:  uploadResult.error },
+        { status:  400 }
+      );
+    }
+
+    // Save to database
+    const result = await sql`
+      INSERT INTO expense_receipts (
+        expense_id, filename, original_filename, cloudinary_public_id, 
+        cloudinary_url, mime_type, size_bytes, uploaded_by
+      )
+      VALUES (
+        ${parseInt(expenseId)}, 
+        ${uploadResult. publicId}, 
+        ${file.name},
+        ${uploadResult.publicId},
+        ${uploadResult.url},
+        ${file.type},
+        ${buffer. length},
+        ${user.id}
+      )
+      RETURNING *
+    `;
+
+    await createAuditLog({
+      userId: user.id,
+      action: 'UPLOAD_RECEIPT',
+      entityType:  'expense_receipt',
+      entityId: result[0]. id,
+      newValues: { expense_id: expenseId, filename:  file.name },
+    });
+
+    return NextResponse.json({
+      success: true,
+      data:  result[0],
+    });
+  } catch (error) {
+    console.error('Receipts POST API error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
 }

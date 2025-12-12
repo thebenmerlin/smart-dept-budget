@@ -13,42 +13,35 @@ const reportTypes = [
     title: 'Monthly Expense Report',
     description: 'Detailed breakdown of expenses by month and category',
     icon: '📊',
-    formats: ['pdf', 'csv'],
+    formats: ['csv', 'pdf'],
   },
   {
     id: 'category',
     title:  'Category-wise Budget Report',
-    description: 'Budget allocation, spending, and variance by category',
+    description:  'Budget allocation, spending, and variance by category',
     icon: '📁',
-    formats:  ['pdf', 'csv'],
+    formats:  ['csv', 'pdf'],
   },
   {
     id: 'budget',
     title:  'Budget Variance Report',
     description: 'Proposed vs allotted budget comparison',
     icon:  '💰',
-    formats:  ['pdf', 'csv'],
+    formats:  ['csv', 'pdf'],
   },
   {
-    id: 'vendor',
+    id:  'vendor',
     title:  'Vendor-wise Report',
     description:  'Expenses grouped by vendor/payee',
     icon: '🏢',
-    formats: ['pdf', 'csv'],
+    formats:  ['csv', 'pdf'],
   },
   {
-    id: 'audit',
-    title: 'Audit Trail Report',
+    id:  'audit',
+    title:  'Audit Trail Report',
     description: 'Complete log of all system activities',
-    icon:  '🔍',
-    formats: ['pdf', 'csv'],
-  },
-  {
-    id: 'expenses',
-    title: 'Detailed Expenses Report',
-    description: 'Complete list of all expenses with details',
-    icon: '📋',
-    formats: ['pdf', 'csv'],
+    icon: '🔍',
+    formats:  ['csv', 'pdf'],
   },
 ];
 
@@ -90,27 +83,27 @@ export default function ReportsPage() {
         throw new Error(errorData.error || 'Failed to generate report');
       }
 
-      const contentDisposition = response. headers.get('Content-Disposition');
-      let filename = `${reportType}-report-${fiscalYear}.${format}`;
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${reportType}-report-${fiscalYear}.${format === 'pdf' ?  'txt' : 'csv'}`;
       if (contentDisposition) {
-        const match = contentDisposition. match(/filename="(. +)"/);
+        const match = contentDisposition.match(/filename="(. +)"/);
         if (match) filename = match[1];
       }
 
       const blob = await response.blob();
-      const url = window. URL.createObjectURL(blob);
-      const a = document. createElement('a');
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
       a.href = url;
       a.download = filename;
-      document.body.appendChild(a);
+      document. body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setSuccessMessage(`${reportType. charAt(0).toUpperCase() + reportType.slice(1)} report downloaded successfully! `);
+      setSuccessMessage(`Report downloaded successfully! `);
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err:  any) {
-      setError(err.message || 'Failed to generate report');
+      setError(err. message || 'Failed to generate report');
     } finally {
       setGenerating(null);
     }
@@ -120,7 +113,7 @@ export default function ReportsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports and Exports</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Reports & Exports</h1>
           <p className="text-sm text-slate-500 mt-1">
             Generate and download comprehensive reports
           </p>
@@ -128,7 +121,7 @@ export default function ReportsPage() {
         <div className="p-8 text-center rounded-xl border border-slate-200 bg-white">
           <h3 className="text-lg font-semibold text-slate-900 mb-2">Access Restricted</h3>
           <p className="text-slate-500">
-            Only HOD and Admin users can download reports.  Contact your administrator for access. 
+            Only HOD and Admin users can download reports. Contact your administrator for access.
           </p>
         </div>
       </div>
@@ -139,7 +132,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports and Exports</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Reports & Exports</h1>
           <p className="text-sm text-slate-500 mt-1">
             Generate and download comprehensive reports for analysis and compliance
           </p>
@@ -155,7 +148,7 @@ export default function ReportsPage() {
             <select
               value={fiscalYear}
               onChange={(e) => setFiscalYear(e.target. value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus: ring-brandNavy/50"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
             >
               {getFiscalYearOptions().map((fy) => (
                 <option key={fy} value={fy}>FY {fy}</option>
@@ -209,7 +202,7 @@ export default function ReportsPage() {
                     key={fmt}
                     className="text-xs uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600"
                   >
-                    {fmt}
+                    {fmt === 'pdf' ?  'TXT' : fmt}
                   </span>
                 ))}
               </div>
@@ -217,28 +210,24 @@ export default function ReportsPage() {
             <h3 className="font-semibold text-slate-900 mb-1">{report.title}</h3>
             <p className="text-sm text-slate-500 mb-4">{report.description}</p>
             <div className="flex gap-2">
-              {report.formats.includes('pdf') && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleDownload(report.id, 'pdf')}
-                  isLoading={generating === `${report.id}-pdf`}
-                  className="flex-1"
-                >
-                  PDF
-                </Button>
-              )}
-              {report.formats. includes('csv') && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDownload(report.id, 'csv')}
-                  isLoading={generating === `${report.id}-csv`}
-                  className="flex-1"
-                >
-                  CSV
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownload(report.id, 'csv')}
+                isLoading={generating === `${report.id}-csv`}
+                className="flex-1"
+              >
+                CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleDownload(report.id, 'pdf')}
+                isLoading={generating === `${report.id}-pdf`}
+                className="flex-1"
+              >
+                TXT
+              </Button>
             </div>
           </div>
         ))}
@@ -252,9 +241,8 @@ export default function ReportsPage() {
           <div>
             <h4 className="font-semibold text-blue-900">NBA/NAAC Compliance</h4>
             <p className="text-sm text-blue-700 mt-1">
-              All reports are formatted to meet accreditation requirements. The Category-wise and Budget Variance
-              reports are specifically designed for NBA/NAAC documentation.  Reports include department details,
-              fiscal year information, and are timestamped for audit purposes.
+              All reports are formatted to meet accreditation requirements.  CSV files can be opened in Excel for further analysis.  
+              TXT files provide formatted printable reports with headers and department information.
             </p>
           </div>
         </div>

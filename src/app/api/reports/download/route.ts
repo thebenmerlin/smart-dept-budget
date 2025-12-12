@@ -10,11 +10,11 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status:  401 });
+      return NextResponse.json({ success: false, error:  'Unauthorized' }, { status: 401 });
     }
 
-    if (!canPerformAction(user.role, 'download_reports')) {
-      return NextResponse.json({ success: false, error: 'Permission denied' }, { status:  403 });
+    if (!canPerformAction(user. role, 'download_reports')) {
+      return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -22,8 +22,9 @@ export async function POST(request: NextRequest) {
     const fiscalYear = fiscal_year || getCurrentFiscalYear();
 
     let data: any[] = [];
-    let headers:  string[] = [];
+    let headers: string[] = [];
     let filename = '';
+    let title = '';
 
     switch (type) {
       case 'monthly':  {
@@ -34,20 +35,21 @@ export async function POST(request: NextRequest) {
             COUNT(*)::int as transactions,
             SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END)::numeric as approved_amount
           FROM expenses e
-          JOIN categories c ON c.id = e.category_id
+          JOIN categories c ON c.id = e. category_id
           WHERE e.department_id = ${user.department_id}
           GROUP BY TO_CHAR(expense_date, 'Mon YYYY'), c.name
           ORDER BY MIN(expense_date) DESC
         `;
         
         headers = ['Month', 'Category', 'Transactions', 'Approved Amount'];
-        data = result.map(r => [
-          r.month,
-          r.category,
-          r.transactions,
-          formatCurrency(Number(r.approved_amount))
-        ]);
+        data = result.map(r => ({
+          month: r.month,
+          category: r.category,
+          transactions:  r.transactions,
+          approved_amount:  formatCurrency(Number(r.approved_amount))
+        }));
         filename = `monthly-report-${fiscalYear}`;
+        title = `Monthly Expense Report - FY ${fiscalYear}`;
         break;
       }
 
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
             COALESCE(ba.allotted_amount, 0)::numeric as allotted,
             COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0)::numeric as spent
           FROM categories c
-          LEFT JOIN budget_plans bp ON bp.category_id = c. id 
+          LEFT JOIN budget_plans bp ON bp.category_id = c.id 
             AND bp.fiscal_year = ${fiscalYear} AND bp.department_id = ${user.department_id}
           LEFT JOIN budget_allotments ba ON ba.category_id = c.id 
             AND ba. fiscal_year = ${fiscalYear} AND ba.department_id = ${user.department_id}
@@ -69,22 +71,23 @@ export async function POST(request: NextRequest) {
           ORDER BY c.name
         `;
         
-        headers = ['Category', 'Proposed', 'Allotted', 'Spent', 'Remaining', 'Utilization %'];
+        headers = ['Category', 'Proposed', 'Allotted', 'Spent', 'Remaining', 'Utilization'];
         data = result.map(r => {
           const allotted = Number(r.allotted);
           const spent = Number(r.spent);
           const remaining = allotted - spent;
-          const util = allotted > 0 ? ((spent / allotted) * 100).toFixed(1) : '0';
-          return [
-            r.category,
-            formatCurrency(Number(r.proposed)),
-            formatCurrency(allotted),
-            formatCurrency(spent),
-            formatCurrency(remaining),
-            util + '%'
-          ];
+          const util = allotted > 0 ? ((spent / allotted) * 100).toFixed(1) + '%' : '0%';
+          return {
+            category:  r.category,
+            proposed: formatCurrency(Number(r.proposed)),
+            allotted: formatCurrency(allotted),
+            spent: formatCurrency(spent),
+            remaining: formatCurrency(remaining),
+            utilization: util
+          };
         });
         filename = `category-report-${fiscalYear}`;
+        title = `Category-wise Budget Report - FY ${fiscalYear}`;
         break;
       }
 
@@ -93,13 +96,13 @@ export async function POST(request: NextRequest) {
           SELECT 
             c.name as category,
             COALESCE(bp.proposed_amount, 0)::numeric as proposed,
-            COALESCE(ba.allotted_amount, 0)::numeric as allotted
+            COALESCE(ba. allotted_amount, 0)::numeric as allotted
           FROM categories c
           LEFT JOIN budget_plans bp ON bp. category_id = c.id 
             AND bp.fiscal_year = ${fiscalYear} AND bp. department_id = ${user.department_id}
           LEFT JOIN budget_allotments ba ON ba.category_id = c. id 
             AND ba.fiscal_year = ${fiscalYear} AND ba.department_id = ${user.department_id}
-          WHERE c.is_active = true
+          WHERE c. is_active = true
           ORDER BY c.name
         `;
         
@@ -108,15 +111,16 @@ export async function POST(request: NextRequest) {
           const proposed = Number(r. proposed);
           const allotted = Number(r.allotted);
           const variance = allotted - proposed;
-          return [
-            r. category,
-            formatCurrency(proposed),
-            formatCurrency(allotted),
-            (variance >= 0 ? '+' : '') + formatCurrency(variance),
-            variance >= 0 ?  'Surplus' : 'Deficit'
-          ];
+          return {
+            category:  r.category,
+            proposed: formatCurrency(proposed),
+            allotted:  formatCurrency(allotted),
+            variance: (variance >= 0 ? '+' : '') + formatCurrency(variance),
+            status: variance >= 0 ?  'Surplus' : 'Deficit'
+          };
         });
         filename = `budget-variance-${fiscalYear}`;
+        title = `Budget Variance Report - FY ${fiscalYear}`;
         break;
       }
 
@@ -135,14 +139,15 @@ export async function POST(request: NextRequest) {
         `;
         
         headers = ['Vendor', 'Transactions', 'Approved', 'Pending', 'Total'];
-        data = result.map(r => [
-          r. vendor,
-          r.transactions,
-          formatCurrency(Number(r.approved)),
-          formatCurrency(Number(r. pending)),
-          formatCurrency(Number(r.total))
-        ]);
+        data = result.map(r => ({
+          vendor: r.vendor,
+          transactions:  r.transactions,
+          approved: formatCurrency(Number(r.approved)),
+          pending: formatCurrency(Number(r. pending)),
+          total: formatCurrency(Number(r.total))
+        }));
         filename = `vendor-report-${fiscalYear}`;
+        title = `Vendor-wise Expense Report - FY ${fiscalYear}`;
         break;
       }
 
@@ -161,14 +166,15 @@ export async function POST(request: NextRequest) {
         `;
         
         headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID'];
-        data = result.map(r => [
-          formatDate(r.created_at, 'dd MMM yyyy HH:mm'),
-          r.user_name,
-          r.action,
-          r. entity_type,
-          r.entity_id || '-'
-        ]);
+        data = result.map(r => ({
+          timestamp: formatDate(r.created_at, 'dd MMM yyyy HH:mm'),
+          user_name: r.user_name,
+          action: r.action,
+          entity_type: r.entity_type,
+          entity_id: r.entity_id || '-'
+        }));
         filename = `audit-report-${fiscalYear}`;
+        title = `Audit Trail Report`;
         break;
       }
 
@@ -180,8 +186,8 @@ export async function POST(request: NextRequest) {
             c.name as category,
             e.vendor,
             e. description,
-            e.amount,
-            e. status
+            e. amount,
+            e.status
           FROM expenses e
           JOIN categories c ON c.id = e.category_id
           WHERE e.department_id = ${user.department_id}
@@ -189,52 +195,99 @@ export async function POST(request: NextRequest) {
         `;
         
         headers = ['Date', 'Category', 'Vendor', 'Description', 'Amount', 'Status'];
-        data = result.map(r => [
-          formatDate(r. expense_date, 'dd MMM yyyy'),
-          r.category,
-          r.vendor,
-          r.description || '-',
-          formatCurrency(Number(r.amount)),
-          r.status
-        ]);
+        data = result.map(r => ({
+          date: formatDate(r.expense_date, 'dd MMM yyyy'),
+          category: r.category,
+          vendor: r.vendor,
+          description: r.description || '-',
+          amount:  formatCurrency(Number(r.amount)),
+          status: r.status
+        }));
         filename = `expenses-report-${fiscalYear}`;
+        title = `Expenses Report - FY ${fiscalYear}`;
         break;
       }
 
-      default: 
+      default:
         return NextResponse.json(
           { success:  false, error: `Unknown report type: ${type}` },
           { status: 400 }
         );
     }
 
-    // Generate CSV
-    const csvRows = [headers.join(',')];
-    for (const row of data) {
-      const escapedRow = row. map((cell:  any) => {
-        const str = String(cell ??  '');
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
+    // Generate output based on format
+    if (format === 'pdf') {
+      // Generate text-based PDF content
+      const pdfLines:  string[] = [];
+      
+      pdfLines.push("JSPM's Rajarshi Shahu College of Engineering");
+      pdfLines.push("Department of Computer Science and Business Systems");
+      pdfLines.push("");
+      pdfLines. push("=" . repeat(70));
+      pdfLines.push(title);
+      pdfLines.push("=".repeat(70));
+      pdfLines.push("");
+      pdfLines.push(`Fiscal Year: ${fiscalYear}`);
+      pdfLines.push(`Department: CSBS`);
+      pdfLines.push(`Generated: ${formatDate(new Date(), 'dd MMM yyyy HH:mm')}`);
+      pdfLines.push(`Generated By: ${user.name}`);
+      pdfLines.push("");
+      pdfLines.push("-".repeat(70));
+      pdfLines.push(headers.join(" | "));
+      pdfLines.push("-".repeat(70));
+      
+      const keys = Object.keys(data[0] || {});
+      for (const row of data) {
+        pdfLines.push(keys.map(k => String(row[k] || '-').substring(0, 12)).join(" | "));
+      }
+      
+      pdfLines.push("-".repeat(70));
+      pdfLines.push(`Total Records: ${data.length}`);
+      pdfLines.push("");
+      pdfLines.push("--- End of Report ---");
+      
+      const textContent = pdfLines.join("\n");
+      
+      // Return as downloadable text file (more reliable than complex PDF)
+      return new NextResponse(textContent, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}. txt"`,
+        },
       });
-      csvRows. push(escapedRow.join(','));
-    }
-    const csvContent = csvRows.join('\n');
+    } else {
+      // Generate CSV
+      const keys = headers.map((h, i) => Object.keys(data[0] || {})[i] || h. toLowerCase().replace(/ /g, '_'));
+      const csvRows = [headers.map(h => `"${h}"`).join(',')];
+      
+      for (const row of data) {
+        const rowValues = Object.values(row).map((cell:  any) => {
+          const str = String(cell ??  '');
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return `"${str}"`;
+        });
+        csvRows. push(rowValues. join(','));
+      }
+      
+      const csvContent = csvRows.join('\n');
 
-    return new NextResponse(csvContent, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}.csv"`,
-      },
-    });
+      return new NextResponse(csvContent, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}.csv"`,
+        },
+      });
+    }
 
   } catch (error:  any) {
     console.error('Report download error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Report generation failed:  ' + (error. message || 'Unknown error') },
-      { status: 500 }
+    return NextResponse. json(
+      { success: false, error: 'Report generation failed:  ' + (error.message || 'Unknown error') },
+      { status:  500 }
     );
   }
 }

@@ -176,4 +176,4 @@ INSERT INTO departments (name, code, academic_year) VALUES
 INSERT INTO users (department_id, name, email, password_hash, role) VALUES
   (1, 'System Administrator', 'admin@rscoe.edu.in', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4. HQgZU0j5MqVqPi', 'admin'),
   (1, 'Dr. Kavita Moholkar', 'hod@rscoe.edu.in', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.HQgZU0j5MqVqPi', 'hod'),
-  (1, 'CSBS Staff', 'staff@rscoe. edu.in', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.HQgZU0j5MqVqPi', 'staff');
+  (1, 'CSBS Staff', 'staff@rscoe.edu.in', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.HQgZU0j5MqVqPi', 'staff');

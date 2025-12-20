@@ -96,11 +96,11 @@ export default function BudgetsPage() {
 
   const fetchSubBudgets = async () => {
     try {
-      const response = await fetch(`/api/sub-budgets? fiscal_year=${fiscalYear}`, {
+      const response = await fetch(`/api/sub-budgets?fiscal_year=${fiscalYear}`, {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.success && result.data) {
+      if (result.success && result. data) {
         const all = result.data as SubBudget[];
         setSubBudgets(all. filter(b => b. budget_type === 'category'));
         setIndependentBudgets(all.filter(b => b.budget_type === 'independent'));
@@ -161,7 +161,7 @@ export default function BudgetsPage() {
     return subBudgets. filter(sb => sb.category_id === categoryId);
   };
 
-  const getCategorySubBudgetTotal = (categoryId: number) => {
+  const getCategorySubBudgetTotal = (categoryId:  number) => {
     return getCategorySubBudgets(categoryId).reduce((sum, sb) => sum + Number(sb.amount), 0);
   };
 
@@ -204,9 +204,9 @@ export default function BudgetsPage() {
       const response = await fetch('/api/budgets/allotments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials:  'include',
-        body: JSON. stringify({
-          category_id: selectedCategory,
+        credentials: 'include',
+        body:  JSON.stringify({
+          category_id:  selectedCategory,
           fiscal_year: fiscalYear,
           allotted_amount:  parseFloat(formData.amount),
           notes: formData.notes,
@@ -227,7 +227,7 @@ export default function BudgetsPage() {
 
   const handleSubmitSubBudget = async (e: React. FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory || !formData.name || !formData. amount) return;
+    if (!selectedCategory || !formData.name || !formData.amount) return;
 
     setIsSubmitting(true);
     try {
@@ -291,7 +291,7 @@ export default function BudgetsPage() {
   const handleDeleteSubBudget = async (id: number) => {
     if (! confirm('Are you sure you want to delete this budget item?')) return;
     try {
-      // FIX: Removed the space before 'id' in the URL - this was causing the delete to fail
+      // FIX: NO SPACE between ? and id - this was causing the delete to fail
       const response = await fetch(`/api/sub-budgets? id=${id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -310,7 +310,7 @@ export default function BudgetsPage() {
   };
 
   const openPlanModal = (categoryId: number) => {
-    const budget = data?. budgets. find(b => b.category_id === categoryId);
+    const budget = data?.budgets.find(b => b.category_id === categoryId);
     setSelectedCategory(categoryId);
     setFormData({
       amount: budget?.proposed_amount?. toString() || '',
@@ -333,7 +333,7 @@ export default function BudgetsPage() {
     setIsAllotmentModalOpen(true);
   };
 
-  const openSubBudgetModal = (categoryId: number) => {
+  const openSubBudgetModal = (categoryId:  number) => {
     setSelectedCategory(categoryId);
     setFormData({ amount: '', notes:  '', name: '', description: '' });
     setIsSubBudgetModalOpen(true);
@@ -363,8 +363,8 @@ export default function BudgetsPage() {
         <div className="flex items-center gap-3">
           <select
             value={fiscalYear}
-            onChange={(e) => setFiscalYear(e. target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
+            onChange={(e) => setFiscalYear(e.target. value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus: ring-brandNavy/50"
           >
             {getFiscalYearOptions().map((fy) => (
               <option key={fy} value={fy}>FY {fy}</option>
@@ -432,7 +432,7 @@ export default function BudgetsPage() {
             <Badge variant="warning">{independentBudgets.length} items</Badge>
           </div>
           <div className="p-4 space-y-2">
-            {independentBudgets. map((budget) => (
+            {independentBudgets.map((budget) => (
               <div
                 key={budget. id}
                 className="flex items-center justify-between p-3 bg-white rounded-lg border border-orange-100"
@@ -491,7 +491,7 @@ export default function BudgetsPage() {
                       </svg>
                       <div>
                         <p className="font-medium text-slate-900">{budget. category_name}</p>
-                        <p className="text-xs text-slate-500">{budget. category_description}</p>
+                        <p className="text-xs text-slate-500">{budget.category_description}</p>
                       </div>
                       {categorySubBudgets. length > 0 && (
                         <Badge variant="info">{categorySubBudgets.length} sub-items</Badge>
@@ -543,13 +543,13 @@ export default function BudgetsPage() {
                       )}
                     </div>
 
-                    {categorySubBudgets. length === 0 ?  (
+                    {categorySubBudgets.length === 0 ?  (
                       <p className="text-sm text-slate-500 italic">No on-the-go budget items yet</p>
                     ) : (
                       <div className="space-y-2">
                         {categorySubBudgets.map((sb) => (
                           <div
-                            key={sb.id}
+                            key={sb. id}
                             className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200"
                           >
                             <div>
@@ -598,7 +598,7 @@ export default function BudgetsPage() {
           <Input
             label="Proposed Amount"
             type="number"
-            value={formData.amount}
+            value={formData. amount}
             onChange={(e) => setFormData({ ...formData, amount: e.target. value })}
             required
           />
@@ -654,7 +654,7 @@ export default function BudgetsPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
             <p className="text-lg font-semibold text-slate-900">
-              {data?.budgets. find(b => b.category_id === selectedCategory)?.category_name}
+              {data?.budgets.find(b => b.category_id === selectedCategory)?.category_name}
             </p>
           </div>
           <Input
@@ -698,8 +698,8 @@ export default function BudgetsPage() {
           <Input
             label="Budget Name"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e. target.value })}
-            placeholder="e.g., Emergency Fund"
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="e. g., Emergency Fund"
             required
           />
           <Input

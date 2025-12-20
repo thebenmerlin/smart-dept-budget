@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { getCurrentUser, canPerformAction } from '@/lib/auth';
-import { createAuditLog } from '@/lib/audit';
-import { getCurrentFiscalYear } from '@/lib/utils';
+import { getCurrentUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,80 +16,32 @@ export async function GET(request:  NextRequest) {
     }
 
     const url = new URL(request.url);
-    const fiscalYear = url.searchParams. get('fiscal_year') || getCurrentFiscalYear();
-    const categoryId = url.searchParams.get('category_id');
-    const budgetType = url. searchParams.get('budget_type');
-    const search = url.searchParams.get('search');
+    const expenseId = url. searchParams.get('expense_id');
 
-    let subBudgets;
-
-    if (search) {
-      subBudgets = await sql`
-        SELECT 
-          sb.*,
-          c.name as category_name,
-          u.name as created_by_name
-        FROM sub_budgets sb
-        LEFT JOIN categories c ON c.id = sb. category_id
-        LEFT JOIN users u ON u.id = sb.created_by
-        WHERE sb.department_id = ${user.department_id}
-          AND sb.fiscal_year = ${fiscalYear}
-          AND (
-            sb.name ILIKE ${'%' + search + '%'}
-            OR sb.description ILIKE ${'%' + search + '%'}
-            OR c.name ILIKE ${'%' + search + '%'}
-          )
-        ORDER BY sb.created_at DESC
-      `;
-    } else if (categoryId && budgetType === 'category') {
-      subBudgets = await sql`
-        SELECT 
-          sb.*,
-          c.name as category_name,
-          u.name as created_by_name
-        FROM sub_budgets sb
-        LEFT JOIN categories c ON c.id = sb.category_id
-        LEFT JOIN users u ON u.id = sb.created_by
-        WHERE sb. department_id = ${user.department_id}
-          AND sb.fiscal_year = ${fiscalYear}
-          AND sb. category_id = ${parseInt(categoryId)}
-          AND sb.budget_type = 'category'
-        ORDER BY sb.created_at DESC
-      `;
-    } else if (budgetType === 'independent') {
-      subBudgets = await sql`
-        SELECT 
-          sb.*,
-          u.name as created_by_name
-        FROM sub_budgets sb
-        LEFT JOIN users u ON u. id = sb.created_by
-        WHERE sb.department_id = ${user.department_id}
-          AND sb.fiscal_year = ${fiscalYear}
-          AND sb.budget_type = 'independent'
-        ORDER BY sb.created_at DESC
-      `;
-    } else {
-      subBudgets = await sql`
-        SELECT 
-          sb.*,
-          c.name as category_name,
-          u.name as created_by_name
-        FROM sub_budgets sb
-        LEFT JOIN categories c ON c. id = sb.category_id
-        LEFT JOIN users u ON u.id = sb. created_by
-        WHERE sb.department_id = ${user. department_id}
-          AND sb.fiscal_year = ${fiscalYear}
-        ORDER BY sb.created_at DESC
-      `;
+    if (!expenseId) {
+      return NextResponse.json(
+        { success:  false, error: 'expense_id is required' },
+        { status: 400 }
+      );
     }
+
+    const subExpenses = await sql`
+      SELECT 
+        se.*
+      FROM sub_expenses se
+      INNER JOIN expenses e ON e.id = se. expense_id
+      WHERE se.expense_id = ${parseInt(expenseId)}
+        AND e.department_id = ${user.department_id}
+      ORDER BY se.created_at DESC
+    `;
 
     return NextResponse.json({
       success: true,
-      data:  subBudgets,
+      data:  subExpenses,
     });
   } catch (err) {
-    console.error('Sub-budgets GET error:', err);
-    const message = err instanceof Error ? err.message :  'Unknown error';
+    console.error('Sub-expenses GET error:', err);
+    const message = err instanceof Error ?  err.message : 'Unknown error';
     return NextResponse.json(
       { success:  false, error: message },
       { status: 500 }
@@ -110,127 +60,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!canPerformAction(user. role, 'manage_budgets')) {
-      return NextResponse.json(
-        { success: false, error:  'Permission denied' },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json();
-    const { category_id, name, description, amount, budget_type, fiscal_year } = body;
+    const { expense_id, items } = body;
 
-    if (!name || amount === undefined || amount === null) {
+    if (!expense_id) {
       return NextResponse.json(
-        { success: false, error:  'Name and amount are required' },
+        { success: false, error: 'expense_id is required' },
         { status: 400 }
       );
     }
 
-    const fy = fiscal_year || getCurrentFiscalYear();
-    const type = budget_type || 'category';
-
-    const result = await sql`
-      INSERT INTO sub_budgets (
-        department_id, category_id, fiscal_year, name, description, 
-        amount, budget_type, created_by
-      )
-      VALUES (
-        ${user.department_id},
-        ${type === 'independent' ? null : category_id},
-        ${fy},
-        ${name},
-        ${description || null},
-        ${parseFloat(amount)},
-        ${type},
-        ${user.id}
-      )
-      RETURNING *
-    `;
-
-    try {
-      await createAuditLog({
-        userId: user.id,
-        action: 'CREATE_SUB_BUDGET',
-        entityType: 'sub_budget',
-        entityId: result[0].id,
-        newValues: { name, amount, budget_type:  type },
-      });
-    } catch (auditErr) {
-      console.error('Audit log error:', auditErr);
-    }
-
-    return NextResponse.json({
-      success: true,
-      data:  result[0],
-      message: 'Sub-budget created successfully',
-    });
-  } catch (err) {
-    console. error('Sub-budgets POST error:', err);
-    const message = err instanceof Error ?  err.message : 'Unknown error';
-    return NextResponse. json(
-      { success: false, error: message },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const user = await getCurrentUser();
-
-    if (!user) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { success:  false, error: 'Unauthorized' },
-        { status:  401 }
-      );
-    }
-
-    if (!canPerformAction(user.role, 'manage_budgets')) {
-      return NextResponse.json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const { id, name, description, amount, status } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Sub-budget ID is required' },
+        { success: false, error: 'items array is required' },
         { status: 400 }
       );
     }
 
-    const result = await sql`
-      UPDATE sub_budgets
-      SET 
-        name = COALESCE(${name}, name),
-        description = COALESCE(${description}, description),
-        amount = COALESCE(${amount ?  parseFloat(amount) : null}, amount),
-        status = COALESCE(${status}, status),
-        updated_at = NOW()
-      WHERE id = ${parseInt(id)} AND department_id = ${user.department_id}
-      RETURNING *
+    // Verify the expense belongs to the user's department
+    const expenseCheck = await sql`
+      SELECT id FROM expenses 
+      WHERE id = ${expense_id} AND department_id = ${user.department_id}
     `;
 
-    if (result.length === 0) {
+    if (expenseCheck.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Sub-budget not found' },
-        { status: 404 }
+        { success: false, error: 'Expense not found' },
+        { status:  404 }
       );
+    }
+
+    // Insert all sub-expenses
+    const insertedItems = [];
+    for (const item of items) {
+      if (! item.name || item.amount === undefined || item.amount === null) {
+        continue;
+      }
+
+      const result = await sql`
+        INSERT INTO sub_expenses (expense_id, name, amount, description)
+        VALUES (
+          ${expense_id},
+          ${item.name},
+          ${parseFloat(item.amount)},
+          ${item.description || null}
+        )
+        RETURNING *
+      `;
+      insertedItems.push(result[0]);
     }
 
     return NextResponse.json({
       success: true,
-      data:  result[0],
+      data:  insertedItems,
+      message: 'Sub-expenses created successfully',
     });
   } catch (err) {
-    console.error('Sub-budgets PUT error:', err);
-    const message = err instanceof Error ? err. message : 'Unknown error';
+    console. error('Sub-expenses POST error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { success:  false, error: message },
+      { success: false, error:  message },
       { status: 500 }
     );
   }
@@ -247,38 +136,46 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (!canPerformAction(user.role, 'manage_budgets')) {
-      return NextResponse. json(
-        { success: false, error: 'Permission denied' },
-        { status: 403 }
-      );
-    }
-
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Sub-budget ID is required' },
+        { success:  false, error: 'Sub-expense ID is required' },
         { status: 400 }
       );
     }
 
-    await sql`
-      DELETE FROM sub_budgets 
-      WHERE id = ${parseInt(id)} AND department_id = ${user.department_id}
+    // Verify the sub-expense belongs to an expense in the user's department
+    const check = await sql`
+      SELECT se.id 
+      FROM sub_expenses se
+      INNER JOIN expenses e ON e.id = se.expense_id
+      WHERE se.id = ${parseInt(id)} AND e.department_id = ${user.department_id}
     `;
 
-    return NextResponse.json({
+    if (check. length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Sub-expense not found' },
+        { status: 404 }
+      );
+    }
+
+    await sql`
+      DELETE FROM sub_expenses 
+      WHERE id = ${parseInt(id)}
+    `;
+
+    return NextResponse. json({
       success: true,
-      message:  'Sub-budget deleted successfully',
+      message:  'Sub-expense deleted successfully',
     });
   } catch (err) {
-    console.error('Sub-budgets DELETE error:', err);
-    const message = err instanceof Error ? err. message : 'Unknown error';
+    console.error('Sub-expenses DELETE error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { success:  false, error: message },
-      { status: 500 }
+      { success: false, error: message },
+      { status:  500 }
     );
   }
 }

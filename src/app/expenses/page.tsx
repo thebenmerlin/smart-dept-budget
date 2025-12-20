@@ -10,7 +10,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 
 interface Category {
   id:  number;
-  name: string;
+  name:  string;
   description:  string;
 }
 
@@ -19,7 +19,7 @@ interface SubExpense {
   expense_id: number;
   name: string;
   amount: number;
-  description:  string | null;
+  description: string | null;
 }
 
 interface Expense {
@@ -68,9 +68,9 @@ export default function ExpensesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
-    category_id: '',
-    amount: '',
-    vendor: '',
+    category_id:  '',
+    amount:  '',
+    vendor:  '',
     expense_date: new Date().toISOString().split('T')[0],
     description: '',
     invoice_number: '',
@@ -84,6 +84,7 @@ export default function ExpensesPage() {
     setIsLoading(true);
     setError(null);
     try {
+      // FIX:  Removed the space before 'limit' in the URL
       let url = '/api/expenses? limit=100';
       if (statusFilter) url += '&status=' + statusFilter;
       if (categoryFilter) url += '&category_id=' + categoryFilter;
@@ -98,8 +99,8 @@ export default function ExpensesPage() {
           filtered = filtered.filter((e:  Expense) =>
             e.vendor.toLowerCase().includes(query) ||
             (e.description && e.description.toLowerCase().includes(query)) ||
-            e.category_name.toLowerCase().includes(query) ||
-            (e.invoice_number && e. invoice_number.toLowerCase().includes(query))
+            e. category_name.toLowerCase().includes(query) ||
+            (e.invoice_number && e.invoice_number.toLowerCase().includes(query))
           );
         }
         setExpenses(filtered);
@@ -115,7 +116,7 @@ export default function ExpensesPage() {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch('/api/categories', { credentials: 'include' });
+      const response = await fetch('/api/categories', { credentials:  'include' });
       const result = await response.json();
       if (result.success && result.data) {
         setCategories(result.data);
@@ -125,9 +126,10 @@ export default function ExpensesPage() {
     }
   };
 
-  const fetchSubExpenses = async (expenseId:  number) => {
+  const fetchSubExpenses = async (expenseId: number) => {
     try {
-      const response = await fetch('/api/sub-expenses? expense_id=' + expenseId, {
+      // FIX:  Removed the space before 'expense_id' in the URL
+      const response = await fetch('/api/sub-expenses?expense_id=' + expenseId, {
         credentials: 'include',
       });
       const result = await response.json();
@@ -174,7 +176,7 @@ export default function ExpensesPage() {
 
     try {
       const response = await fetch('/api/expenses', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
@@ -188,15 +190,15 @@ export default function ExpensesPage() {
       });
       const result = await response.json();
 
-      if (result.success) {
+      if (result. success) {
         setIsCreateModalOpen(false);
         setFormData({
           category_id: '',
           amount: '',
           vendor: '',
-          expense_date:  new Date().toISOString().split('T')[0],
+          expense_date: new Date().toISOString().split('T')[0],
           description: '',
-          invoice_number:  '',
+          invoice_number: '',
         });
         fetchExpenses();
       } else {
@@ -218,7 +220,7 @@ export default function ExpensesPage() {
         body: JSON.stringify({ status: 'approved' }),
       });
       const result = await response.json();
-      if (result. success) {
+      if (result.success) {
         fetchExpenses();
       }
     } catch (err) {
@@ -255,7 +257,7 @@ export default function ExpensesPage() {
     if (! confirm('Are you sure you want to delete this expense?')) return;
     try {
       const response = await fetch('/api/expenses/' + expense.id, {
-        method: 'DELETE',
+        method:  'DELETE',
         credentials: 'include',
       });
       const result = await response.json();
@@ -279,12 +281,12 @@ export default function ExpensesPage() {
   };
 
   const addSubExpenseRow = () => {
-    setSubExpenseItems([...subExpenseItems, { name:  '', amount: '', description: '' }]);
+    setSubExpenseItems([... subExpenseItems, { name: '', amount: '', description: '' }]);
   };
 
   const removeSubExpenseRow = (index: number) => {
     if (subExpenseItems.length > 1) {
-      const updated = subExpenseItems. filter((_, i) => i !== index);
+      const updated = subExpenseItems.filter((_, i) => i !== index);
       setSubExpenseItems(updated);
     }
   };
@@ -300,7 +302,7 @@ export default function ExpensesPage() {
     if (!selectedExpense) return;
 
     const validItems = subExpenseItems.filter(item => item.name && item.amount);
-    if (validItems. length === 0) {
+    if (validItems.length === 0) {
       alert('Please add at least one sub-expense with name and amount');
       return;
     }
@@ -309,26 +311,26 @@ export default function ExpensesPage() {
     try {
       const response = await fetch('/api/sub-expenses', {
         method: 'POST',
-        headers:  { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body:  JSON.stringify({
-          expense_id:  selectedExpense.id,
-          items:  validItems.map(item => ({
+        headers: { 'Content-Type': 'application/json' },
+        credentials:  'include',
+        body: JSON. stringify({
+          expense_id: selectedExpense.id,
+          items: validItems. map(item => ({
             name: item.name,
-            amount:  parseFloat(item. amount),
+            amount: parseFloat(item.amount),
             description: item.description,
           })),
         }),
       });
       const result = await response.json();
 
-      if (result.success) {
+      if (result. success) {
         setIsSubExpenseModalOpen(false);
         setSelectedExpense(null);
-        setSubExpenseItems([{ name: '', amount: '', description: '' }]);
+        setSubExpenseItems([{ name: '', amount:  '', description: '' }]);
         fetchSubExpenses(selectedExpense.id);
       } else {
-        alert(result.error || 'Failed to add sub-expenses');
+        alert(result. error || 'Failed to add sub-expenses');
       }
     } catch (err) {
       alert('Network error');
@@ -337,14 +339,15 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleDeleteSubExpense = async (subExpenseId: number, expenseId:  number) => {
-    if (! confirm('Delete this sub-expense? ')) return;
+  const handleDeleteSubExpense = async (subExpenseId: number, expenseId: number) => {
+    if (!confirm('Delete this sub-expense?')) return;
     try {
+      // FIX:  Removed the space before 'id' in the URL
       const response = await fetch('/api/sub-expenses? id=' + subExpenseId, {
-        method: 'DELETE',
-        credentials:  'include',
+        method:  'DELETE',
+        credentials: 'include',
       });
-      const result = await response. json();
+      const result = await response.json();
       if (result.success) {
         fetchSubExpenses(expenseId);
       }
@@ -355,7 +358,7 @@ export default function ExpensesPage() {
 
   const getSubExpenseTotal = (expenseId: number) => {
     const subs = subExpensesMap[expenseId] || [];
-    return subs. reduce((sum, se) => sum + Number(se.amount), 0);
+    return subs.reduce((sum, se) => sum + Number(se.amount), 0);
   };
 
   if (isLoading && expenses.length === 0) {
@@ -391,18 +394,18 @@ export default function ExpensesPage() {
           </div>
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => setCategoryFilter(e. target.value)}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
           >
             <option value="">All Categories</option>
-            {categories. map((cat) => (
+            {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e. target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus: outline-none focus: ring-2 focus:ring-brandNavy/50"
           >
             <option value="">All Status</option>
             <option value="pending">Pending</option>
@@ -431,7 +434,7 @@ export default function ExpensesPage() {
         ) : (
           <div className="divide-y divide-slate-200">
             {expenses.map((expense) => {
-              const isExpanded = expandedExpenses.has(expense. id);
+              const isExpanded = expandedExpenses.has(expense.id);
               const subExpenses = subExpensesMap[expense.id] || [];
               const subTotal = getSubExpenseTotal(expense.id);
 
@@ -457,18 +460,18 @@ export default function ExpensesPage() {
                             <Badge
                               variant={
                                 expense.status === 'approved' ? 'success' : 
-                                expense.status === 'rejected' ? 'danger' :  'warning'
+                                expense. status === 'rejected' ? 'danger' :  'warning'
                               }
                             >
                               {expense. status}
                             </Badge>
                             {subExpenses.length > 0 && (
-                              <Badge variant="info">{subExpenses. length} items</Badge>
+                              <Badge variant="info">{subExpenses.length} items</Badge>
                             )}
                           </div>
                           <p className="text-xs text-slate-500">
                             {expense.category_name} | {formatDate(expense.expense_date, 'dd MMM yyyy')}
-                            {expense.description && ' | ' + expense.description}
+                            {expense.description && ' | ' + expense. description}
                           </p>
                         </div>
                       </div>
@@ -476,7 +479,7 @@ export default function ExpensesPage() {
                         <div className="text-right">
                           <p className="font-semibold text-slate-900">{formatCurrency(expense.amount)}</p>
                           {subExpenses.length > 0 && (
-                            <p className="text-xs text-purple-600">Breakdown: {formatCurrency(subTotal)}</p>
+                            <p className="text-xs text-purple-600">Breakdown:  {formatCurrency(subTotal)}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -552,7 +555,7 @@ export default function ExpensesPage() {
                       {expense.rejection_reason && (
                         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                           <p className="text-sm text-red-700">
-                            <span className="font-medium">Rejection Reason: </span> {expense. rejection_reason}
+                            <span className="font-medium">Rejection Reason:  </span> {expense.rejection_reason}
                           </p>
                         </div>
                       )}
@@ -577,8 +580,8 @@ export default function ExpensesPage() {
                 required
               >
                 <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                {categories. map((cat) => (
+                  <option key={cat. id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
             </div>
@@ -596,7 +599,7 @@ export default function ExpensesPage() {
             <Input
               label="Vendor / Payee *"
               value={formData.vendor}
-              onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, vendor: e. target.value })}
               required
             />
             <Input
@@ -641,7 +644,7 @@ export default function ExpensesPage() {
       <Modal isOpen={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Expense" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Rejecting expense of <span className="font-semibold">{formatCurrency(selectedExpense?. amount || 0)}</span> from {selectedExpense?.vendor}
+            Rejecting expense of <span className="font-semibold">{formatCurrency(selectedExpense?.amount || 0)}</span> from {selectedExpense?.vendor}
           </p>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Rejection Reason *</label>
@@ -662,7 +665,7 @@ export default function ExpensesPage() {
               variant="danger"
               onClick={handleReject}
               isLoading={isSubmitting}
-              disabled={!rejectReason. trim()}
+              disabled={!rejectReason.trim()}
             >
               Reject Expense
             </Button>

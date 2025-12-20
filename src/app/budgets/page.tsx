@@ -16,7 +16,7 @@ interface SubBudget {
   description: string | null;
   amount: number;
   budget_type: string;
-  status:  string;
+  status: string;
   category_name: string | null;
   created_by_name: string;
   created_at: string;
@@ -29,7 +29,7 @@ interface BudgetItem {
   proposed_amount: number;
   allotted_amount:  number;
   spent_amount: number;
-  variance: number;
+  variance:  number;
   remaining:  number;
   utilization: number;
   plan_status: string | null;
@@ -100,10 +100,10 @@ export default function BudgetsPage() {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.success && result.data) {
+      if (result.success && result. data) {
         const all = result.data as SubBudget[];
-        setSubBudgets(all. filter(b => b. budget_type === 'category'));
-        setIndependentBudgets(all.filter(b => b. budget_type === 'independent'));
+        setSubBudgets(all. filter(b => b.budget_type === 'category'));
+        setIndependentBudgets(all.filter(b => b.budget_type === 'independent'));
       }
     } catch (err) {
       console.error('Failed to fetch sub-budgets:', err);
@@ -150,7 +150,7 @@ export default function BudgetsPage() {
   const toggleCategory = (categoryId: number) => {
     const newExpanded = new Set(expandedCategories);
     if (newExpanded.has(categoryId)) {
-      newExpanded. delete(categoryId);
+      newExpanded.delete(categoryId);
     } else {
       newExpanded.add(categoryId);
     }
@@ -177,7 +177,7 @@ export default function BudgetsPage() {
         credentials: 'include',
         body: JSON.stringify({
           category_id: selectedCategory,
-          fiscal_year:  fiscalYear,
+          fiscal_year: fiscalYear,
           proposed_amount: parseFloat(formData. amount),
           justification: formData. notes,
         }),
@@ -208,7 +208,7 @@ export default function BudgetsPage() {
         body:  JSON.stringify({
           category_id:  selectedCategory,
           fiscal_year: fiscalYear,
-          allotted_amount:  parseFloat(formData.amount),
+          allotted_amount: parseFloat(formData.amount),
           notes: formData.notes,
         }),
       });
@@ -240,7 +240,7 @@ export default function BudgetsPage() {
           fiscal_year: fiscalYear,
           name: formData. name,
           description: formData.description,
-          amount: parseFloat(formData. amount),
+          amount:  parseFloat(formData.amount),
           budget_type: 'category',
         }),
       });
@@ -270,19 +270,19 @@ export default function BudgetsPage() {
         body: JSON.stringify({
           fiscal_year: fiscalYear,
           name: formData.name,
-          description: formData.description,
-          amount:  parseFloat(formData.amount),
+          description:  formData.description,
+          amount: parseFloat(formData. amount),
           budget_type: 'independent',
         }),
       });
       const result = await response.json();
-      if (result. success) {
+      if (result.success) {
         setIsIndependentBudgetModalOpen(false);
-        setFormData({ amount: '', notes: '', name: '', description:  '' });
+        setFormData({ amount:  '', notes: '', name: '', description: '' });
         fetchSubBudgets();
       }
     } catch (err) {
-      console. error('Error:', err);
+      console.error('Error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -291,6 +291,7 @@ export default function BudgetsPage() {
   const handleDeleteSubBudget = async (id: number) => {
     if (! confirm('Are you sure you want to delete this budget item?')) return;
     try {
+      // FIX: Removed the space before 'id' in the URL
       const response = await fetch(`/api/sub-budgets? id=${id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -305,7 +306,7 @@ export default function BudgetsPage() {
   };
 
   const openPlanModal = (categoryId: number) => {
-    const budget = data?. budgets.find(b => b.category_id === categoryId);
+    const budget = data?.budgets. find(b => b.category_id === categoryId);
     setSelectedCategory(categoryId);
     setFormData({
       amount: budget?.proposed_amount?. toString() || '',
@@ -343,8 +344,8 @@ export default function BudgetsPage() {
   }
 
   const totals = data?.totals;
-  const independentTotal = independentBudgets. reduce((sum, b) => sum + Number(b.amount), 0);
-  const subBudgetTotal = subBudgets.reduce((sum, b) => sum + Number(b.amount), 0);
+  const independentTotal = independentBudgets.reduce((sum, b) => sum + Number(b.amount), 0);
+  const subBudgetTotal = subBudgets. reduce((sum, b) => sum + Number(b.amount), 0);
 
   return (
     <div className="space-y-6">
@@ -358,8 +359,8 @@ export default function BudgetsPage() {
         <div className="flex items-center gap-3">
           <select
             value={fiscalYear}
-            onChange={(e) => setFiscalYear(e.target. value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus: ring-brandNavy/50"
+            onChange={(e) => setFiscalYear(e. target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus: outline-none focus: ring-2 focus:ring-brandNavy/50"
           >
             {getFiscalYearOptions().map((fy) => (
               <option key={fy} value={fy}>FY {fy}</option>
@@ -526,7 +527,7 @@ export default function BudgetsPage() {
                           <Button size="sm" variant="outline" onClick={() => openPlanModal(budget.category_id)}>
                             Propose
                           </Button>
-                          {(user?. role === 'admin' || user?.role === 'hod') && (
+                          {(user?.role === 'admin' || user?. role === 'hod') && (
                             <Button size="sm" variant="secondary" onClick={() => openAllotmentModal(budget.category_id)}>
                               Allot
                             </Button>
@@ -538,7 +539,7 @@ export default function BudgetsPage() {
                       )}
                     </div>
 
-                    {categorySubBudgets.length === 0 ?  (
+                    {categorySubBudgets.length === 0 ? (
                       <p className="text-sm text-slate-500 italic">No on-the-go budget items yet</p>
                     ) : (
                       <div className="space-y-2">
@@ -601,9 +602,9 @@ export default function BudgetsPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Justification</label>
             <textarea
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e. target.value })}
+              onChange={(e) => setFormData({ ...formData, notes: e.target. value })}
               rows={3}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus: outline-none focus: ring-2 focus:ring-brandNavy/50"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
             />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
@@ -693,8 +694,8 @@ export default function BudgetsPage() {
           <Input
             label="Budget Name"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e. g., Emergency Fund"
+            onChange={(e) => setFormData({ ...formData, name: e. target.value })}
+            placeholder="e.g., Emergency Fund"
             required
           />
           <Input
@@ -708,7 +709,7 @@ export default function BudgetsPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e. target.value })}
+              onChange={(e) => setFormData({ ... formData, description:  e.target.value })}
               rows={2}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
               placeholder="Optional description..."

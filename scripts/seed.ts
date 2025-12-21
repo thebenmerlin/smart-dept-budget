@@ -118,8 +118,8 @@ async function seed() {
 
   const users = [
     { id: 1, name: 'System Administrator', email: 'admin@rscoe.edu. in', role: 'admin' },
-    { id: 2, name: 'Dr.  Kavita Moholkar', email: 'hod@rscoe. edu.in', role: 'hod' },
-    { id: 3, name: 'CSBS Staff', email: 'staff@rscoe. edu.in', role: 'staff' },
+    { id: 2, name: 'Dr.  Kavita Moholkar', email: 'hod@rscoe.edu.in', role: 'hod' },
+    { id: 3, name: 'CSBS Staff', email: 'staff@rscoe.edu.in', role: 'staff' },
   ];
 
   for (const u of users) {
@@ -220,8 +220,8 @@ async function seed() {
 
   console.log('\nDatabase seeded successfully!');
   console.log('\nLogin credentials:');
-  console.log('  admin@rscoe. edu.in / Admin@123');
-  console.log('  hod@rscoe.edu. in / Admin@123');
+  console.log('  admin@rscoe.edu.in / Admin@123');
+  console.log('  hod@rscoe.edu.in / Admin@123');
   console.log('  staff@rscoe.edu.in / Admin@123');
 }
 

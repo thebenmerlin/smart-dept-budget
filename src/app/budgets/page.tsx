@@ -11,7 +11,7 @@ import { formatCurrency, getCurrentFiscalYear, getFiscalYearOptions } from '@/li
 
 interface SubBudgetItem {
   id: number;
-  sub_budget_id: number;
+  sub_budget_id:  number;
   name: string;
   amount: number;
   description: string | null;
@@ -58,7 +58,7 @@ interface BudgetData {
 
 interface BreakdownItem {
   name: string;
-  amount:  string;
+  amount: string;
   description:  string;
 }
 
@@ -100,7 +100,7 @@ export default function BudgetsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/budgets? fiscal_year=${fiscalYear}`, {
+      const response = await fetch(`/api/budgets?fiscal_year=${fiscalYear}`, {
         credentials: 'include',
       });
       const result = await response.json();
@@ -122,7 +122,7 @@ export default function BudgetsPage() {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.success && result. data) {
+      if (result.success && result.data) {
         const all = result.data as SubBudget[];
         setSubBudgets(all. filter(b => b.budget_type === 'category'));
         setIndependentBudgets(all.filter(b => b.budget_type === 'independent'));
@@ -132,16 +132,17 @@ export default function BudgetsPage() {
     }
   };
 
-  const fetchSubBudgetItems = async (subBudgetId:  number) => {
+  const fetchSubBudgetItems = async (subBudgetId: number) => {
     try {
-      const response = await fetch(`/api/sub-budget-items? sub_budget_id=${subBudgetId}`, {
+      // FIX:  Removed the space before sub_budget_id
+      const response = await fetch(`/api/sub-budget-items?sub_budget_id=${subBudgetId}`, {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.success && result. data) {
+      if (result.success && result.data) {
         setSubBudgetItemsMap(prev => ({
           ...prev,
-          [subBudgetId]:  result.data,
+          [subBudgetId]: result.data,
         }));
       }
     } catch (err) {
@@ -150,7 +151,7 @@ export default function BudgetsPage() {
   };
 
   const searchBudgets = async (query: string) => {
-    if (!query.trim()) {
+    if (!query. trim()) {
       fetchSubBudgets();
       return;
     }
@@ -162,11 +163,11 @@ export default function BudgetsPage() {
       const result = await response.json();
       if (result.success && result. data) {
         const all = result.data as SubBudget[];
-        setSubBudgets(all. filter(b => b.budget_type === 'category'));
+        setSubBudgets(all.filter(b => b.budget_type === 'category'));
         setIndependentBudgets(all.filter(b => b.budget_type === 'independent'));
       }
     } catch (err) {
-      console. error('Search error:', err);
+      console.error('Search error:', err);
     }
   };
 
@@ -224,7 +225,7 @@ export default function BudgetsPage() {
 
   const handleSubmitPlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory || !formData.amount) return;
+    if (!selectedCategory || ! formData.amount) return;
 
     setIsSubmitting(true);
     try {
@@ -234,7 +235,7 @@ export default function BudgetsPage() {
         credentials: 'include',
         body: JSON.stringify({
           category_id: selectedCategory,
-          fiscal_year:  fiscalYear,
+          fiscal_year: fiscalYear,
           proposed_amount: parseFloat(formData. amount),
           justification: formData. notes,
         }),
@@ -284,7 +285,7 @@ export default function BudgetsPage() {
 
   const handleSubmitSubBudget = async (e: React. FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory || !formData. name || !formData.amount) return;
+    if (!selectedCategory || !formData. name || !formData. amount) return;
 
     setIsSubmitting(true);
     try {
@@ -297,14 +298,14 @@ export default function BudgetsPage() {
           fiscal_year: fiscalYear,
           name: formData.name,
           description: formData.description,
-          amount:  parseFloat(formData.amount),
+          amount: parseFloat(formData.amount),
           budget_type: 'category',
         }),
       });
       const result = await response.json();
       if (result. success) {
         setIsSubBudgetModalOpen(false);
-        setFormData({ amount: '', notes: '', name: '', description: '' });
+        setFormData({ amount: '', notes: '', name:  '', description: '' });
         fetchSubBudgets();
       }
     } catch (err) {
@@ -321,10 +322,10 @@ export default function BudgetsPage() {
     setIsSubmitting(true);
     try {
       const response = await fetch('/api/sub-budgets', {
-        method:  'POST',
-        headers: { 'Content-Type':  'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials:  'include',
+        body: JSON. stringify({
           fiscal_year: fiscalYear,
           name: formData.name,
           description:  formData.description,
@@ -353,7 +354,7 @@ export default function BudgetsPage() {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result. success) {
+      if (result.success) {
         fetchSubBudgets();
       } else {
         console.error('Delete failed:', result.error);
@@ -382,7 +383,7 @@ export default function BudgetsPage() {
   };
 
   const openPlanModal = (categoryId: number) => {
-    const budget = data?.budgets. find(b => b.category_id === categoryId);
+    const budget = data?. budgets.find(b => b.category_id === categoryId);
     setSelectedCategory(categoryId);
     setFormData({
       amount: budget?.proposed_amount?. toString() || '',
@@ -413,12 +414,12 @@ export default function BudgetsPage() {
 
   const openBreakdownModal = (subBudget: SubBudget) => {
     setSelectedSubBudget(subBudget);
-    setBreakdownItems([{ name: '', amount:  '', description: '' }]);
+    setBreakdownItems([{ name: '', amount: '', description:  '' }]);
     setIsBreakdownModalOpen(true);
   };
 
   const addBreakdownRow = () => {
-    setBreakdownItems([...breakdownItems, { name: '', amount: '', description: '' }]);
+    setBreakdownItems([... breakdownItems, { name: '', amount:  '', description: '' }]);
   };
 
   const removeBreakdownRow = (index: number) => {
@@ -433,8 +434,8 @@ export default function BudgetsPage() {
     setBreakdownItems(updated);
   };
 
-  const handleSubmitBreakdown = async (e:  React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitBreakdown = async (e: React.FormEvent) => {
+    e. preventDefault();
     if (!selectedSubBudget) return;
 
     const validItems = breakdownItems. filter(item => item.name && item. amount);
@@ -446,15 +447,15 @@ export default function BudgetsPage() {
     setIsSubmitting(true);
     try {
       const response = await fetch('/api/sub-budget-items', {
-        method:  'POST',
-        headers: { 'Content-Type':  'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          sub_budget_id: selectedSubBudget.id,
-          items: validItems. map(item => ({
+          sub_budget_id: selectedSubBudget. id,
+          items:  validItems. map(item => ({
             name: item.name,
             amount: parseFloat(item.amount),
-            description:  item.description,
+            description: item. description,
           })),
         }),
       });
@@ -462,9 +463,11 @@ export default function BudgetsPage() {
 
       if (result. success) {
         setIsBreakdownModalOpen(false);
+        const subBudgetId = selectedSubBudget. id;
         setSelectedSubBudget(null);
         setBreakdownItems([{ name: '', amount:  '', description: '' }]);
-        fetchSubBudgetItems(selectedSubBudget.id);
+        // Refresh the sub-budget items for this specific sub-budget
+        fetchSubBudgetItems(subBudgetId);
       } else {
         alert(result.error || 'Failed to add breakdown');
       }
@@ -490,7 +493,7 @@ export default function BudgetsPage() {
   const renderSubBudgetCard = (sb: SubBudget) => {
     const isExpanded = expandedSubBudgets. has(sb.id);
     const items = subBudgetItemsMap[sb.id] || [];
-    const itemsTotal = getSubBudgetItemsTotal(sb. id);
+    const itemsTotal = getSubBudgetItemsTotal(sb.id);
 
     return (
       <div key={sb.id} className="border border-slate-200 rounded-lg overflow-hidden">
@@ -700,7 +703,7 @@ export default function BudgetsPage() {
             const subBudgetSum = getCategorySubBudgetTotal(budget.category_id);
 
             return (
-              <div key={budget. category_id}>
+              <div key={budget.category_id}>
                 <div
                   className="p-4 hover:bg-slate-50 cursor-pointer"
                   onClick={() => toggleCategory(budget.category_id)}
@@ -717,7 +720,7 @@ export default function BudgetsPage() {
                       </svg>
                       <div>
                         <p className="font-medium text-slate-900">{budget.category_name}</p>
-                        <p className="text-xs text-slate-500">{budget. category_description}</p>
+                        <p className="text-xs text-slate-500">{budget.category_description}</p>
                       </div>
                       {categorySubBudgets.length > 0 && (
                         <Badge variant="info">{categorySubBudgets.length} sub-items</Badge>
@@ -757,7 +760,7 @@ export default function BudgetsPage() {
                           <Button size="sm" variant="outline" onClick={() => openPlanModal(budget. category_id)}>
                             Propose
                           </Button>
-                          {(user?.role === 'admin' || user?. role === 'hod') && (
+                          {(user?. role === 'admin' || user?.role === 'hod') && (
                             <Button size="sm" variant="secondary" onClick={() => openAllotmentModal(budget.category_id)}>
                               Allot
                             </Button>
@@ -769,7 +772,7 @@ export default function BudgetsPage() {
                       )}
                     </div>
 
-                    {categorySubBudgets.length === 0 ? (
+                    {categorySubBudgets.length === 0 ?  (
                       <p className="text-sm text-slate-500 italic">No on-the-go budget items yet</p>
                     ) : (
                       <div className="space-y-2">
@@ -827,7 +830,7 @@ export default function BudgetsPage() {
             label="Allotted Amount"
             type="number"
             value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e.target. value })}
+            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
             required
           />
           <div>
@@ -903,14 +906,14 @@ export default function BudgetsPage() {
             label="Amount"
             type="number"
             value={formData.amount}
-            onChange={(e) => setFormData({ ...formData, amount: e. target.value })}
+            onChange={(e) => setFormData({ ... formData, amount:  e.target.value })}
             required
           />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e. target.value })}
+              onChange={(e) => setFormData({ ... formData, description:  e.target.value })}
               rows={2}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
               placeholder="Optional description..."
@@ -949,8 +952,8 @@ export default function BudgetsPage() {
                     type="number"
                     step="0.01"
                     placeholder="Amount"
-                    value={item. amount}
-                    onChange={(e) => updateBreakdownItem(index, 'amount', e.target.value)}
+                    value={item.amount}
+                    onChange={(e) => updateBreakdownItem(index, 'amount', e.target. value)}
                   />
                 </div>
                 <div className="flex-1">
@@ -963,7 +966,7 @@ export default function BudgetsPage() {
                 <button
                   type="button"
                   onClick={() => removeBreakdownRow(index)}
-                  className="p-2 text-red-500 hover:text-red-700"
+                  className="p-2 text-red-500 hover: text-red-700"
                   disabled={breakdownItems.length === 1}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

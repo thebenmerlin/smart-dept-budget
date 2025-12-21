@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request:  NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
 
@@ -16,7 +16,7 @@ export async function GET(request:  NextRequest) {
     }
 
     const url = new URL(request.url);
-    const subBudgetId = url.searchParams. get('sub_budget_id');
+    const subBudgetId = url.searchParams.get('sub_budget_id');
 
     if (!subBudgetId) {
       return NextResponse.json(
@@ -41,10 +41,10 @@ export async function GET(request:  NextRequest) {
     });
   } catch (err) {
     console.error('Sub-budget-items GET error:', err);
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message = err instanceof Error ?  err.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: message },
-      { status:  500 }
+      { success:  false, error: message },
+      { status: 500 }
     );
   }
 }
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!items || ! Array.isArray(items) || items.length === 0) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse. json(
         { success: false, error: 'items array is required' },
         { status: 400 }
@@ -84,16 +84,16 @@ export async function POST(request: NextRequest) {
     `;
 
     if (subBudgetCheck.length === 0) {
-      return NextResponse. json(
+      return NextResponse.json(
         { success: false, error: 'Sub-budget not found' },
-        { status:  404 }
+        { status: 404 }
       );
     }
 
     // Insert all sub-budget items
     const insertedItems = [];
     for (const item of items) {
-      if (!item. name || item.amount === undefined || item. amount === null) {
+      if (! item.name || item.amount === undefined || item.amount === null) {
         continue;
       }
 
@@ -101,36 +101,36 @@ export async function POST(request: NextRequest) {
         INSERT INTO sub_budget_items (sub_budget_id, name, amount, description)
         VALUES (
           ${sub_budget_id},
-          ${item. name},
-          ${parseFloat(item. amount)},
+          ${item.name},
+          ${parseFloat(item.amount)},
           ${item.description || null}
         )
         RETURNING *
       `;
-      insertedItems. push(result[0]);
+      insertedItems.push(result[0]);
     }
 
-    return NextResponse. json({
+    return NextResponse.json({
       success: true,
-      data: insertedItems,
+      data:  insertedItems,
       message: 'Sub-budget items created successfully',
     });
   } catch (err) {
     console.error('Sub-budget-items POST error:', err);
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message = err instanceof Error ? err. message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: message },
-      { status:  500 }
+      { success:  false, error: message },
+      { status: 500 }
     );
   }
 }
 
-export async function DELETE(request:  NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse. json(
+      return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
@@ -166,16 +166,16 @@ export async function DELETE(request:  NextRequest) {
       WHERE id = ${parseInt(id)}
     `;
 
-    return NextResponse.json({
+    return NextResponse. json({
       success: true,
-      message:  'Sub-budget item deleted successfully',
+      message: 'Sub-budget item deleted successfully',
     });
   } catch (err) {
     console.error('Sub-budget-items DELETE error:', err);
-    const message = err instanceof Error ?  err.message : 'Unknown error';
-    return NextResponse. json(
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
       { success: false, error: message },
-      { status: 500 }
+      { status:  500 }
     );
   }
 }

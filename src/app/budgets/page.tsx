@@ -348,7 +348,7 @@ export default function BudgetsPage() {
   const handleDeleteSubBudget = async (id: number) => {
     if (! confirm('Are you sure you want to delete this budget item?')) return;
     try {
-      const response = await fetch(`/api/sub-budgets? id=${id}`, {
+      const response = await fetch(`/api/sub-budgets?id=${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });

@@ -1,9 +1,9 @@
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process. env.DATABASE_URL;
 
-if (!databaseUrl) {
+if (! databaseUrl) {
   console.error('DATABASE_URL not set');
   console.error('Run:  npx dotenv -e .env.local -- npx tsx scripts/seed.ts --reset');
   process.exit(1);
@@ -44,6 +44,18 @@ async function createTables() {
     )
   `;
 
+  // Create sub_budget_items table (NEW - for breakdown of sub-budgets)
+  await sql`
+    CREATE TABLE IF NOT EXISTS sub_budget_items (
+      id SERIAL PRIMARY KEY,
+      sub_budget_id INT REFERENCES sub_budgets(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      amount DECIMAL(15, 2) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
   console.log('  Tables created');
 }
 
@@ -51,6 +63,7 @@ async function resetDatabase() {
   console.log('Resetting database...');
 
   try {
+    await sql`DELETE FROM sub_budget_items`;
     await sql`DELETE FROM sub_expenses`;
     await sql`DELETE FROM sub_budgets`;
     await sql`DELETE FROM expense_receipts`;
@@ -100,13 +113,13 @@ async function seed() {
   }
 
   // Users
-  console.log('Creating users...');
+  console. log('Creating users.. .');
   const passwordHash = await bcrypt.hash('Admin@123', 12);
 
   const users = [
-    { id: 1, name: 'System Administrator', email: 'admin@rscoe.edu.in', role: 'admin' },
-    { id: 2, name: 'Dr. Kavita Moholkar', email: 'hod@rscoe.edu.in', role: 'hod' },
-    { id: 3, name: 'CSBS Staff', email: 'staff@rscoe.edu.in', role: 'staff' },
+    { id: 1, name: 'System Administrator', email: 'admin@rscoe.edu. in', role: 'admin' },
+    { id: 2, name: 'Dr.  Kavita Moholkar', email: 'hod@rscoe. edu.in', role: 'hod' },
+    { id: 3, name: 'CSBS Staff', email: 'staff@rscoe. edu.in', role: 'staff' },
   ];
 
   for (const u of users) {
@@ -135,7 +148,7 @@ async function seed() {
   for (const b of budgets) {
     await sql`
       INSERT INTO budget_plans (department_id, category_id, fiscal_year, proposed_amount, created_by, status)
-      VALUES (1, ${b. cat}, ${fiscalYear}, ${b. proposed}, 1, 'approved')
+      VALUES (1, ${b.cat}, ${fiscalYear}, ${b.proposed}, 1, 'approved')
       ON CONFLICT (department_id, category_id, fiscal_year) DO UPDATE SET proposed_amount = ${b.proposed}
     `;
     await sql`
@@ -147,17 +160,32 @@ async function seed() {
 
   // Sample sub-budgets
   console.log('Creating sub-budgets...');
-  await sql`
+  const subBudgetResult = await sql`
     INSERT INTO sub_budgets (department_id, category_id, fiscal_year, name, description, amount, budget_type, created_by)
     VALUES 
       (1, 2, ${fiscalYear}, 'New Lab PCs', 'Purchase of 10 new computers for Lab 3', 150000, 'category', 2),
       (1, 6, ${fiscalYear}, 'Hackathon 2024', 'Annual department hackathon', 35000, 'category', 2),
       (1, NULL, ${fiscalYear}, 'Emergency Fund', 'Reserve for unexpected expenses', 50000, 'independent', 1),
       (1, NULL, ${fiscalYear}, 'Industry Collaboration', 'MoU signing and events', 75000, 'independent', 2)
+    RETURNING id, name
   `;
 
+  // Add sample sub-budget items (breakdown) for the Hackathon sub-budget
+  const hackathonBudget = subBudgetResult. find((sb:  any) => sb.name === 'Hackathon 2024');
+  if (hackathonBudget) {
+    console.log('  Adding breakdown items for Hackathon 2024...');
+    await sql`
+      INSERT INTO sub_budget_items (sub_budget_id, name, amount, description)
+      VALUES 
+        (${hackathonBudget.id}, 'Prize Pool', 15000, 'Cash prizes for top 3 teams'),
+        (${hackathonBudget.id}, 'Food & Refreshments', 10000, 'Meals and snacks for participants'),
+        (${hackathonBudget.id}, 'Marketing & Posters', 5000, 'Promotional materials'),
+        (${hackathonBudget.id}, 'Certificates & Swag', 5000, 'Participation kits and certificates')
+    `;
+  }
+
   // Sample expenses
-  console. log('Creating sample expenses...');
+  console.log('Creating sample expenses...');
   const expenses = [
     { cat: 2, amount: 85000, vendor: 'Dell Technologies', date: '2024-06-15', desc: 'OptiPlex systems', status: 'approved' },
     { cat: 3, amount: 45000, vendor: 'Microsoft', date: '2024-07-01', desc:  'Azure credits', status: 'approved' },
@@ -177,7 +205,7 @@ async function seed() {
 
     // Add sub-expenses for the hackathon expense
     if (e.vendor === 'Event Co') {
-      const expenseId = result[0].id;
+      const expenseId = result[0]. id;
       await sql`
         INSERT INTO sub_expenses (expense_id, name, amount, description)
         VALUES 
@@ -192,8 +220,8 @@ async function seed() {
 
   console.log('\nDatabase seeded successfully!');
   console.log('\nLogin credentials:');
-  console.log('  admin@rscoe.edu.in / Admin@123');
-  console.log('  hod@rscoe.edu.in / Admin@123');
+  console.log('  admin@rscoe. edu.in / Admin@123');
+  console.log('  hod@rscoe.edu. in / Admin@123');
   console.log('  staff@rscoe.edu.in / Admin@123');
 }
 

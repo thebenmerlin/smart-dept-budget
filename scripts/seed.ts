@@ -1,9 +1,9 @@
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
-const databaseUrl = process. env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL;
 
-if (! databaseUrl) {
+if (!databaseUrl) {
   console.error('DATABASE_URL not set');
   console.error('Run:  npx dotenv -e .env.local -- npx tsx scripts/seed.ts --reset');
   process.exit(1);
@@ -14,17 +14,19 @@ const sql = neon(databaseUrl);
 async function createTables() {
   console.log('Creating tables if not exist...');
 
-  // Create sub_budgets table
+  // Create budgets table (new unified budgets)
   await sql`
-    CREATE TABLE IF NOT EXISTS sub_budgets (
+    CREATE TABLE IF NOT EXISTS budgets (
       id SERIAL PRIMARY KEY,
       department_id INT REFERENCES departments(id) ON DELETE CASCADE,
-      category_id INT REFERENCES categories(id) ON DELETE CASCADE,
-      fiscal_year VARCHAR(20) NOT NULL,
+      category_id INT REFERENCES categories(id) ON DELETE SET NULL,
       name VARCHAR(255) NOT NULL,
-      description TEXT,
       amount DECIMAL(15, 2) NOT NULL DEFAULT 0,
-      budget_type VARCHAR(50) DEFAULT 'category' CHECK (budget_type IN ('category', 'independent')),
+      description TEXT,
+      source VARCHAR(255),
+      payment_method VARCHAR(50) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'cheque', 'online', 'other')),
+      budget_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      fiscal_year VARCHAR(20) NOT NULL,
       status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
       created_by INT REFERENCES users(id),
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -32,58 +34,83 @@ async function createTables() {
     )
   `;
 
-  // Create sub_expenses table
+  // Create budget_breakdowns table
   await sql`
-    CREATE TABLE IF NOT EXISTS sub_expenses (
+    CREATE TABLE IF NOT EXISTS budget_breakdowns (
       id SERIAL PRIMARY KEY,
-      expense_id INT REFERENCES expenses(id) ON DELETE CASCADE,
+      budget_id INT REFERENCES budgets(id) ON DELETE CASCADE,
       name VARCHAR(255) NOT NULL,
       amount DECIMAL(15, 2) NOT NULL,
-      description TEXT,
+      payment_method VARCHAR(50) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'cheque', 'online', 'other')),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
 
-  // Create sub_budget_items table (NEW - for breakdown of sub-budgets)
+  // Create expenses table (updated)
   await sql`
-    CREATE TABLE IF NOT EXISTS sub_budget_items (
+    CREATE TABLE IF NOT EXISTS expenses_new (
       id SERIAL PRIMARY KEY,
-      sub_budget_id INT REFERENCES sub_budgets(id) ON DELETE CASCADE,
+      department_id INT REFERENCES departments(id) ON DELETE CASCADE,
+      budget_id INT REFERENCES budgets(id) ON DELETE SET NULL,
+      category_id INT REFERENCES categories(id) ON DELETE SET NULL,
       name VARCHAR(255) NOT NULL,
       amount DECIMAL(15, 2) NOT NULL,
       description TEXT,
+      spender VARCHAR(255),
+      payment_method VARCHAR(50) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'cheque', 'online', 'other')),
+      expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+      rejection_reason TEXT,
+      created_by INT REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  // Create expense_breakdowns table
+  await sql`
+    CREATE TABLE IF NOT EXISTS expense_breakdowns (
+      id SERIAL PRIMARY KEY,
+      expense_id INT REFERENCES expenses_new(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      amount DECIMAL(15, 2) NOT NULL,
+      breakdown_date DATE,
+      payment_method VARCHAR(50) DEFAULT 'cash' CHECK (payment_method IN ('cash', 'cheque', 'online', 'other')),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
 
-  console.log('  Tables created');
+  // Create expense_receipts table
+  await sql`
+    CREATE TABLE IF NOT EXISTS expense_receipts_new (
+      id SERIAL PRIMARY KEY,
+      expense_id INT REFERENCES expenses_new(id) ON DELETE CASCADE,
+      file_name VARCHAR(255) NOT NULL,
+      file_url TEXT NOT NULL,
+      file_type VARCHAR(100),
+      file_size INT,
+      uploaded_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
+  console.log('Tables created');
 }
 
 async function resetDatabase() {
   console.log('Resetting database...');
-
   try {
-    await sql`DELETE FROM sub_budget_items`;
-    await sql`DELETE FROM sub_expenses`;
-    await sql`DELETE FROM sub_budgets`;
-    await sql`DELETE FROM expense_receipts`;
-    await sql`DELETE FROM expenses`;
-    await sql`DELETE FROM budget_allotments`;
-    await sql`DELETE FROM budget_plans`;
-    await sql`DELETE FROM activity_events`;
-    await sql`DELETE FROM audit_logs`;
-    await sql`DELETE FROM sessions`;
-    await sql`DELETE FROM users`;
-    await sql`DELETE FROM categories`;
-    await sql`DELETE FROM departments`;
-    console.log('  Tables cleared');
+    await sql`DROP TABLE IF EXISTS expense_receipts_new CASCADE`;
+    await sql`DROP TABLE IF EXISTS expense_breakdowns CASCADE`;
+    await sql`DROP TABLE IF EXISTS expenses_new CASCADE`;
+    await sql`DROP TABLE IF EXISTS budget_breakdowns CASCADE`;
+    await sql`DROP TABLE IF EXISTS budgets CASCADE`;
+    console.log('Tables dropped');
   } catch (error:  any) {
-    console.error('  Reset error:', error. message);
+    console.error('Reset error:', error. message);
   }
 }
 
 async function seed() {
-  // Department
   console.log('Creating department...');
   await sql`
     INSERT INTO departments (id, name, code, academic_year)
@@ -91,7 +118,6 @@ async function seed() {
     ON CONFLICT (id) DO NOTHING
   `;
 
-  // Categories
   console.log('Creating categories...');
   const categories = [
     { id: 1, name: 'Infrastructure', desc: 'Lab setup, repairs, furniture' },
@@ -112,12 +138,10 @@ async function seed() {
     `;
   }
 
-  // Users
-  console. log('Creating users.. .');
+  console.log('Creating users...');
   const passwordHash = await bcrypt.hash('Admin@123', 12);
-
   const users = [
-    { id: 1, name: 'System Administrator', email: 'admin@rscoe.edu. in', role: 'admin' },
+    { id: 1, name: 'System Administrator', email: 'admin@rscoe.edu.in', role: 'admin' },
     { id: 2, name: 'Dr.  Kavita Moholkar', email: 'hod@rscoe.edu.in', role: 'hod' },
     { id: 3, name: 'CSBS Staff', email: 'staff@rscoe.edu.in', role: 'staff' },
   ];
@@ -128,94 +152,60 @@ async function seed() {
       VALUES (${u. id}, 1, ${u. name}, ${u. email}, ${passwordHash}, ${u.role}, true)
       ON CONFLICT (id) DO UPDATE SET password_hash = ${passwordHash}, is_active = true
     `;
-    console.log('  Created:  ' + u.email);
+    console.log('Created:  ' + u.email);
   }
 
-  // Budget plans & allotments
-  console.log('Creating budgets...');
   const fiscalYear = '2024-25';
-  const budgets = [
-    { cat: 1, proposed: 300000, allotted: 280000 },
-    { cat: 2, proposed: 250000, allotted: 230000 },
-    { cat: 3, proposed: 150000, allotted: 140000 },
-    { cat: 4, proposed: 100000, allotted: 90000 },
-    { cat: 5, proposed: 50000, allotted: 45000 },
-    { cat: 6, proposed: 75000, allotted: 70000 },
-    { cat: 7, proposed: 40000, allotted: 35000 },
-    { cat: 8, proposed: 35000, allotted: 30000 },
-  ];
 
-  for (const b of budgets) {
-    await sql`
-      INSERT INTO budget_plans (department_id, category_id, fiscal_year, proposed_amount, created_by, status)
-      VALUES (1, ${b.cat}, ${fiscalYear}, ${b.proposed}, 1, 'approved')
-      ON CONFLICT (department_id, category_id, fiscal_year) DO UPDATE SET proposed_amount = ${b.proposed}
-    `;
-    await sql`
-      INSERT INTO budget_allotments (department_id, category_id, fiscal_year, allotted_amount, approved_by, approved_at)
-      VALUES (1, ${b.cat}, ${fiscalYear}, ${b.allotted}, 2, NOW())
-      ON CONFLICT (department_id, category_id, fiscal_year) DO UPDATE SET allotted_amount = ${b.allotted}
-    `;
-  }
-
-  // Sample sub-budgets
-  console.log('Creating sub-budgets...');
-  const subBudgetResult = await sql`
-    INSERT INTO sub_budgets (department_id, category_id, fiscal_year, name, description, amount, budget_type, created_by)
+  console.log('Creating sample budgets...');
+  const budgetResults = await sql`
+    INSERT INTO budgets (department_id, category_id, name, amount, description, source, payment_method, budget_date, fiscal_year, created_by)
     VALUES 
-      (1, 2, ${fiscalYear}, 'New Lab PCs', 'Purchase of 10 new computers for Lab 3', 150000, 'category', 2),
-      (1, 6, ${fiscalYear}, 'Hackathon 2024', 'Annual department hackathon', 35000, 'category', 2),
-      (1, NULL, ${fiscalYear}, 'Emergency Fund', 'Reserve for unexpected expenses', 50000, 'independent', 1),
-      (1, NULL, ${fiscalYear}, 'Industry Collaboration', 'MoU signing and events', 75000, 'independent', 2)
+      (1, 2, 'Lab Computer Upgrade', 250000, 'Purchase of 20 new computers for Lab 3', 'College Fund', 'cheque', '2024-04-15', ${fiscalYear}, 2),
+      (1, 6, 'Hackathon 2024', 75000, 'Annual department hackathon event', 'Sponsorship', 'online', '2024-05-01', ${fiscalYear}, 2),
+      (1, 3, 'Software Licenses', 150000, 'Annual software licenses renewal', 'Department Budget', 'online', '2024-04-01', ${fiscalYear}, 1),
+      (1, 4, 'Faculty Development Program', 100000, 'FDP on AI/ML', 'AICTE Grant', 'cheque', '2024-06-15', ${fiscalYear}, 2),
+      (1, 1, 'Lab Furniture', 180000, 'New furniture for seminar hall', 'College Fund', 'cheque', '2024-07-01', ${fiscalYear}, 1)
     RETURNING id, name
   `;
 
-  // Add sample sub-budget items (breakdown) for the Hackathon sub-budget
-  const hackathonBudget = subBudgetResult. find((sb:  any) => sb.name === 'Hackathon 2024');
+  // Add breakdowns for Hackathon budget
+  const hackathonBudget = budgetResults.find((b: any) => b.name === 'Hackathon 2024');
   if (hackathonBudget) {
-    console.log('  Adding breakdown items for Hackathon 2024...');
     await sql`
-      INSERT INTO sub_budget_items (sub_budget_id, name, amount, description)
+      INSERT INTO budget_breakdowns (budget_id, name, amount, payment_method)
       VALUES 
-        (${hackathonBudget.id}, 'Prize Pool', 15000, 'Cash prizes for top 3 teams'),
-        (${hackathonBudget.id}, 'Food & Refreshments', 10000, 'Meals and snacks for participants'),
-        (${hackathonBudget.id}, 'Marketing & Posters', 5000, 'Promotional materials'),
-        (${hackathonBudget.id}, 'Certificates & Swag', 5000, 'Participation kits and certificates')
+        (${hackathonBudget.id}, 'Prize Pool', 30000, 'online'),
+        (${hackathonBudget.id}, 'Food & Refreshments', 20000, 'cash'),
+        (${hackathonBudget.id}, 'Marketing & Posters', 10000, 'cash'),
+        (${hackathonBudget.id}, 'Certificates & Swag', 15000, 'cheque')
     `;
   }
 
-  // Sample expenses
   console.log('Creating sample expenses...');
-  const expenses = [
-    { cat: 2, amount: 85000, vendor: 'Dell Technologies', date: '2024-06-15', desc: 'OptiPlex systems', status: 'approved' },
-    { cat: 3, amount: 45000, vendor: 'Microsoft', date: '2024-07-01', desc:  'Azure credits', status: 'approved' },
-    { cat: 4, amount: 35000, vendor: 'IIT Bombay', date: '2024-07-20', desc: 'FDP registration', status: 'approved' },
-    { cat: 5, amount: 15000, vendor: 'Guest Speaker', date: '2024-08-10', desc: 'Lecture honorarium', status: 'pending' },
-    { cat: 6, amount: 50000, vendor: 'Event Co', date: '2024-09-15', desc: 'Hackathon prizes', status: 'pending' },
-    { cat: 1, amount: 120000, vendor: 'Godrej', date: '2024-10-01', desc: 'Lab furniture', status: 'rejected' },
-  ];
+  const labBudget = budgetResults. find((b: any) => b.name === 'Lab Computer Upgrade');
+  
+  const expenseResults = await sql`
+    INSERT INTO expenses_new (department_id, budget_id, category_id, name, amount, description, spender, payment_method, expense_date, status, created_by)
+    VALUES 
+      (1, ${labBudget?. id || null}, 2, 'Dell OptiPlex Computers', 180000, 'Purchase of 15 Dell OptiPlex systems', 'Admin Office', 'cheque', '2024-06-15', 'approved', 3),
+      (1, ${hackathonBudget?.id || null}, 6, 'Hackathon Prizes', 25000, 'Cash prizes for winners', 'Event Committee', 'cash', '2024-09-20', 'approved', 3),
+      (1, NULL, 3, 'Microsoft Office Licenses', 45000, 'Annual subscription renewal', 'IT Department', 'online', '2024-07-01', 'approved', 3),
+      (1, NULL, 5, 'Guest Lecture Honorarium', 15000, 'Payment to industry expert', 'HOD Office', 'cheque', '2024-08-10', 'pending', 3),
+      (1, NULL, 1, 'Lab Repairs', 35000, 'Air conditioning repair', 'Maintenance', 'cash', '2024-10-01', 'rejected', 3)
+    RETURNING id, name
+  `;
 
-  for (const e of expenses) {
-    const result = await sql`
-      INSERT INTO expenses (department_id, category_id, amount, vendor, expense_date, description, status, created_by)
-      VALUES (1, ${e.cat}, ${e.amount}, ${e.vendor}, ${e.date}, ${e.desc}, ${e.status}, 3)
-      RETURNING id
+  // Add breakdowns for computer expense
+  const computerExpense = expenseResults.find((e: any) => e.name === 'Dell OptiPlex Computers');
+  if (computerExpense) {
+    await sql`
+      INSERT INTO expense_breakdowns (expense_id, name, amount, breakdown_date, payment_method)
+      VALUES 
+        (${computerExpense.id}, 'CPU Units', 120000, '2024-06-15', 'cheque'),
+        (${computerExpense.id}, 'Monitors', 45000, '2024-06-15', 'cheque'),
+        (${computerExpense.id}, 'Keyboards & Mice', 15000, '2024-06-16', 'cash')
     `;
-    console.log('  Expense:  ' + e.vendor + ' (' + e.status + ')');
-
-    // Add sub-expenses for the hackathon expense
-    if (e.vendor === 'Event Co') {
-      const expenseId = result[0]. id;
-      await sql`
-        INSERT INTO sub_expenses (expense_id, name, amount, description)
-        VALUES 
-          (${expenseId}, 'Prize Money - 1st Place', 20000, 'Winner team'),
-          (${expenseId}, 'Prize Money - 2nd Place', 15000, 'Runner up'),
-          (${expenseId}, 'Refreshments', 8000, 'Food and beverages'),
-          (${expenseId}, 'Certificates & Trophies', 7000, 'Printing and awards')
-      `;
-      console.log('    Added sub-expenses');
-    }
   }
 
   console.log('\nDatabase seeded successfully!');
@@ -229,13 +219,13 @@ async function main() {
   const shouldReset = process.argv.includes('--reset') || process.argv. includes('-r');
 
   try {
-    await createTables();
     if (shouldReset) {
       await resetDatabase();
     }
+    await createTables();
     await seed();
   } catch (error) {
-    console.error('Seed failed:', error);
+    console. error('Seed failed:', error);
     process.exit(1);
   }
 

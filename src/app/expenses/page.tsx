@@ -8,107 +8,114 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-interface Category {
-  id:  number;
-  name:  string;
-  description:  string;
+interface ExpenseBreakdown {
+  id?:  number;
+  name: string;
+  amount: number | string;
+  breakdown_date: string;
+  payment_method: string;
 }
 
-interface SubExpense {
+interface ExpenseReceipt {
+  id?: number;
+  file_name: string;
+  file_url: string;
+  file_type?:  string;
+}
+
+interface Budget {
   id: number;
-  expense_id: number;
   name: string;
   amount: number;
-  description: string | null;
 }
 
 interface Expense {
   id: number;
-  category_id: number;
-  category_name: string;
-  event_id: number | null;
-  event_name: string | null;
+  name: string;
   amount: number;
-  vendor:  string;
-  expense_date: string;
+  budget_id: number | null;
+  budget_name: string | null;
+  budget_amount: number | null;
+  category_id: number | null;
+  category_name: string | null;
   description: string | null;
-  invoice_number: string | null;
-  status: 'pending' | 'approved' | 'rejected';
+  spender:  string | null;
+  payment_method: string;
+  expense_date: string;
+  status: string;
+  rejection_reason: string | null;
   created_by: number;
   created_by_name: string;
-  rejection_reason: string | null;
   created_at: string;
+  breakdowns: ExpenseBreakdown[];
+  receipts: ExpenseReceipt[];
 }
 
-interface SubExpenseItem {
+interface Category {
+  id: number;
   name: string;
-  amount: string;
-  description:  string;
 }
 
 export default function ExpensesPage() {
   const { user } = useAuth();
   const { canApprove } = useRole();
-
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [expandedExpenses, setExpandedExpenses] = useState<Set<number>>(new Set());
-  const [subExpensesMap, setSubExpensesMap] = useState<Record<number, SubExpense[]>>({});
-
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [isSubExpenseModalOpen, setIsSubExpenseModalOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [formData, setFormData] = useState({
-    category_id:  '',
-    amount:  '',
-    vendor:  '',
-    expense_date: new Date().toISOString().split('T')[0],
-    description: '',
-    invoice_number: '',
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    period: '',
+    category_id: '',
+    status: '',
+    source: '',
   });
 
-  const [subExpenseItems, setSubExpenseItems] = useState<SubExpenseItem[]>([
-    { name: '', amount: '', description:  '' },
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '',
+    amount: '',
+    budget_id: '',
+    category_id: '',
+    description: '',
+    spender: '',
+    payment_method:  'cash',
+    expense_date: new Date().toISOString().split('T')[0],
+  });
+
+  const [breakdownItems, setBreakdownItems] = useState<ExpenseBreakdown[]>([
+    { name: '', amount: '', breakdown_date: '', payment_method: 'cash' },
   ]);
+
+  const [receiptItems, setReceiptItems] = useState<ExpenseReceipt[]>([]);
 
   const fetchExpenses = async () => {
     setIsLoading(true);
-    setError(null);
     try {
-      // FIX:  Removed the space before 'limit' in the URL
-      let url = '/api/expenses? limit=100';
-      if (statusFilter) url += '&status=' + statusFilter;
-      if (categoryFilter) url += '&category_id=' + categoryFilter;
+      let url = '/api/expenses-new? ';
+      if (searchQuery) url += `search=${encodeURIComponent(searchQuery)}&`;
+      if (filters.category_id) url += `category_id=${filters.category_id}&`;
+      if (filters.status) url += `status=${filters.status}&`;
+      if (filters.period) url += `period=${filters.period}&`;
 
       const response = await fetch(url, { credentials: 'include' });
       const result = await response.json();
-
-      if (result. success && result.data) {
-        let filtered = result.data. expenses;
-        if (searchQuery) {
-          const query = searchQuery.toLowerCase();
-          filtered = filtered.filter((e:  Expense) =>
-            e.vendor.toLowerCase().includes(query) ||
-            (e.description && e.description.toLowerCase().includes(query)) ||
-            e. category_name.toLowerCase().includes(query) ||
-            (e.invoice_number && e.invoice_number.toLowerCase().includes(query))
-          );
-        }
-        setExpenses(filtered);
-      } else {
-        setError(result.error || 'Failed to fetch expenses');
+      if (result.success) {
+        setExpenses(result.data || []);
+        setTotal(result.total || 0);
       }
     } catch (err) {
-      setError('Network error');
+      console.error('Failed to fetch expenses:', err);
     } finally {
       setIsLoading(false);
     }
@@ -118,37 +125,31 @@ export default function ExpensesPage() {
     try {
       const response = await fetch('/api/categories', { credentials:  'include' });
       const result = await response.json();
-      if (result.success && result.data) {
-        setCategories(result.data);
+      if (result.success) {
+        setCategories(result. data || []);
       }
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     }
   };
 
-  const fetchSubExpenses = async (expenseId: number) => {
+  const fetchBudgets = async () => {
     try {
-      // FIX:  Removed the space before 'expense_id' in the URL
-      const response = await fetch('/api/sub-expenses?expense_id=' + expenseId, {
-        credentials: 'include',
-      });
+      const response = await fetch('/api/budgets-new', { credentials: 'include' });
       const result = await response.json();
-      if (result.success && result.data) {
-        setSubExpensesMap(prev => {
-          const updated = { ...prev };
-          updated[expenseId] = result.data;
-          return updated;
-        });
+      if (result.success) {
+        setBudgets(result.data || []);
       }
     } catch (err) {
-      console.error('Failed to fetch sub-expenses:', err);
+      console.error('Failed to fetch budgets:', err);
     }
   };
 
   useEffect(() => {
     fetchExpenses();
     fetchCategories();
-  }, [statusFilter, categoryFilter]);
+    fetchBudgets();
+  }, [filters]);
 
   useEffect(() => {
     const debounce = setTimeout(() => {
@@ -157,49 +158,96 @@ export default function ExpensesPage() {
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
-  const toggleExpense = (expenseId: number) => {
-    const newExpanded = new Set(expandedExpenses);
-    if (newExpanded.has(expenseId)) {
-      newExpanded. delete(expenseId);
-    } else {
-      newExpanded.add(expenseId);
-      if (! subExpensesMap[expenseId]) {
-        fetchSubExpenses(expenseId);
-      }
-    }
-    setExpandedExpenses(newExpanded);
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      amount: '',
+      budget_id: '',
+      category_id: '',
+      description: '',
+      spender: '',
+      payment_method: 'cash',
+      expense_date: new Date().toISOString().split('T')[0],
+    });
+    setBreakdownItems([{ name: '', amount: '', breakdown_date: '', payment_method: 'cash' }]);
+    setReceiptItems([]);
   };
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const openAddModal = () => {
+    resetForm();
+    setIsAddModalOpen(true);
+  };
 
+  const openViewModal = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setFormData({
+      name: expense. name,
+      amount: expense. amount.toString(),
+      budget_id: expense.budget_id?. toString() || '',
+      category_id: expense.category_id?. toString() || '',
+      description:  expense.description || '',
+      spender: expense.spender || '',
+      payment_method: expense. payment_method,
+      expense_date: expense.expense_date. split('T')[0],
+    });
+    setBreakdownItems(
+      expense.breakdowns && expense.breakdowns.length > 0
+        ? expense. breakdowns.map(b => ({
+            ... b,
+            amount: b.amount.toString(),
+            breakdown_date: b.breakdown_date?. split('T')[0] || '',
+          }))
+        : [{ name: '', amount: '', breakdown_date: '', payment_method:  'cash' }]
+    );
+    setReceiptItems(expense.receipts || []);
+    setIsEditMode(false);
+    setIsViewModalOpen(true);
+  };
+
+  const getSelectedBudget = () => {
+    if (!formData.budget_id) return null;
+    return budgets.find(b => b.id === parseInt(formData.budget_id));
+  };
+
+  const getBudgetRemaining = () => {
+    const budget = getSelectedBudget();
+    if (!budget) return null;
+    const expenseAmount = parseFloat(formData.amount) || 0;
+    return budget.amount - expenseAmount;
+  };
+
+  const handleSubmit = async (e: React. FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData. amount) return;
+
+    setIsSubmitting(true);
     try {
-      const response = await fetch('/api/expenses', {
-        method:  'POST',
+      const validBreakdowns = breakdownItems.filter(b => b.name && b.amount);
+      const payload = {
+        ...formData,
+        amount: parseFloat(formData.amount),
+        budget_id: formData.budget_id ?  parseInt(formData.budget_id) : null,
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        breakdowns: validBreakdowns. map(b => ({
+          name: b.name,
+          amount: parseFloat(b.amount. toString()),
+          breakdown_date: b.breakdown_date || null,
+          payment_method:  b.payment_method,
+        })),
+        receipts: receiptItems,
+      };
+
+      const response = await fetch('/api/expenses-new', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          category_id: parseInt(formData.category_id),
-          amount: parseFloat(formData.amount),
-          vendor: formData.vendor,
-          expense_date:  formData.expense_date,
-          description: formData.description,
-          invoice_number: formData. invoice_number,
-        }),
+        body: JSON.stringify(payload),
       });
-      const result = await response.json();
 
-      if (result. success) {
-        setIsCreateModalOpen(false);
-        setFormData({
-          category_id: '',
-          amount: '',
-          vendor: '',
-          expense_date: new Date().toISOString().split('T')[0],
-          description: '',
-          invoice_number: '',
-        });
+      const result = await response.json();
+      if (result.success) {
+        setIsAddModalOpen(false);
+        resetForm();
         fetchExpenses();
       } else {
         alert(result.error || 'Failed to create expense');
@@ -211,17 +259,60 @@ export default function ExpensesPage() {
     }
   };
 
+  const handleUpdate = async () => {
+    if (!selectedExpense || !formData.name || !formData.amount) return;
+
+    setIsSubmitting(true);
+    try {
+      const validBreakdowns = breakdownItems.filter(b => b. name && b.amount);
+      const payload = {
+        id: selectedExpense.id,
+        ...formData,
+        amount: parseFloat(formData.amount),
+        budget_id: formData.budget_id ? parseInt(formData.budget_id) : null,
+        category_id:  formData.category_id ? parseInt(formData.category_id) : null,
+        breakdowns:  validBreakdowns.map(b => ({
+          name: b. name,
+          amount: parseFloat(b.amount.toString()),
+          breakdown_date: b.breakdown_date || null,
+          payment_method: b.payment_method,
+        })),
+      };
+
+      const response = await fetch('/api/expenses-new', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setIsViewModalOpen(false);
+        setIsEditMode(false);
+        fetchExpenses();
+      } else {
+        alert(result.error || 'Failed to update expense');
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleApprove = async (expense: Expense) => {
     try {
-      const response = await fetch('/api/expenses/' + expense.id, {
-        method:  'PUT',
-        headers:  { 'Content-Type': 'application/json' },
+      const response = await fetch('/api/expenses-new', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: 'approved' }),
+        body: JSON.stringify({ id: expense.id, status: 'approved' }),
       });
       const result = await response.json();
       if (result.success) {
         fetchExpenses();
+        setIsViewModalOpen(false);
       }
     } catch (err) {
       console.error('Approve error:', err);
@@ -229,21 +320,25 @@ export default function ExpensesPage() {
   };
 
   const handleReject = async () => {
-    if (! selectedExpense || ! rejectReason. trim()) return;
+    if (!selectedExpense || !rejectReason. trim()) return;
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/expenses/' + selectedExpense.id, {
-        method:  'PUT',
-        headers: { 'Content-Type':  'application/json' },
+      const response = await fetch('/api/expenses-new', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: 'rejected', rejection_reason: rejectReason }),
+        body: JSON.stringify({
+          id: selectedExpense. id,
+          status: 'rejected',
+          rejection_reason: rejectReason,
+        }),
       });
       const result = await response.json();
       if (result.success) {
         setIsRejectModalOpen(false);
         setRejectReason('');
-        setSelectedExpense(null);
+        setIsViewModalOpen(false);
         fetchExpenses();
       }
     } catch (err) {
@@ -253,15 +348,16 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleDelete = async (expense: Expense) => {
-    if (! confirm('Are you sure you want to delete this expense?')) return;
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this expense?')) return;
     try {
-      const response = await fetch('/api/expenses/' + expense.id, {
-        method:  'DELETE',
+      const response = await fetch(`/api/expenses-new?id=${id}`, {
+        method: 'DELETE',
         credentials: 'include',
       });
       const result = await response.json();
       if (result.success) {
+        setIsViewModalOpen(false);
         fetchExpenses();
       }
     } catch (err) {
@@ -269,97 +365,169 @@ export default function ExpensesPage() {
     }
   };
 
-  const openRejectModal = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setIsRejectModalOpen(true);
+  const addBreakdownRow = () => {
+    setBreakdownItems([... breakdownItems, { name: '', amount: '', breakdown_date: '', payment_method: 'cash' }]);
   };
 
-  const openSubExpenseModal = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setSubExpenseItems([{ name: '', amount:  '', description: '' }]);
-    setIsSubExpenseModalOpen(true);
-  };
-
-  const addSubExpenseRow = () => {
-    setSubExpenseItems([... subExpenseItems, { name: '', amount: '', description: '' }]);
-  };
-
-  const removeSubExpenseRow = (index: number) => {
-    if (subExpenseItems.length > 1) {
-      const updated = subExpenseItems.filter((_, i) => i !== index);
-      setSubExpenseItems(updated);
+  const removeBreakdownRow = (index: number) => {
+    if (breakdownItems.length > 1) {
+      setBreakdownItems(breakdownItems.filter((_, i) => i !== index));
     }
   };
 
-  const updateSubExpenseItem = (index: number, field: keyof SubExpenseItem, value: string) => {
-    const updated = [...subExpenseItems];
-    updated[index][field] = value;
-    setSubExpenseItems(updated);
+  const updateBreakdownItem = (index: number, field:  keyof ExpenseBreakdown, value: string) => {
+    const updated = [... breakdownItems];
+    (updated[index] as any)[field] = value;
+    setBreakdownItems(updated);
   };
 
-  const handleSubmitSubExpenses = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedExpense) return;
+  const addReceiptRow = () => {
+    setReceiptItems([...receiptItems, { file_name: '', file_url: '' }]);
+  };
 
-    const validItems = subExpenseItems.filter(item => item.name && item.amount);
-    if (validItems.length === 0) {
-      alert('Please add at least one sub-expense with name and amount');
-      return;
-    }
+  const removeReceiptRow = (index:  number) => {
+    setReceiptItems(receiptItems. filter((_, i) => i !== index));
+  };
 
-    setIsSubmitting(true);
-    try {
-      const response = await fetch('/api/sub-expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials:  'include',
-        body: JSON. stringify({
-          expense_id: selectedExpense.id,
-          items: validItems. map(item => ({
-            name: item.name,
-            amount: parseFloat(item.amount),
-            description: item.description,
-          })),
-        }),
-      });
-      const result = await response.json();
+  const updateReceiptItem = (index:  number, field: keyof ExpenseReceipt, value: string) => {
+    const updated = [... receiptItems];
+    (updated[index] as any)[field] = value;
+    setReceiptItems(updated);
+  };
 
-      if (result. success) {
-        setIsSubExpenseModalOpen(false);
-        setSelectedExpense(null);
-        setSubExpenseItems([{ name: '', amount:  '', description: '' }]);
-        fetchSubExpenses(selectedExpense.id);
-      } else {
-        alert(result. error || 'Failed to add sub-expenses');
-      }
-    } catch (err) {
-      alert('Network error');
-    } finally {
-      setIsSubmitting(false);
+  const breakdownTotal = breakdownItems.reduce((sum, item) => sum + (parseFloat(item.amount. toString()) || 0), 0);
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'approved': return 'success';
+      case 'rejected': return 'danger';
+      default:  return 'warning';
     }
   };
 
-  const handleDeleteSubExpense = async (subExpenseId: number, expenseId: number) => {
-    if (!confirm('Delete this sub-expense?')) return;
-    try {
-      // FIX:  Removed the space before 'id' in the URL
-      const response = await fetch('/api/sub-expenses? id=' + subExpenseId, {
-        method:  'DELETE',
-        credentials: 'include',
-      });
-      const result = await response.json();
-      if (result.success) {
-        fetchSubExpenses(expenseId);
-      }
-    } catch (err) {
-      console.error('Delete sub-expense error:', err);
-    }
-  };
+  const renderBreakdownForm = (readonly: boolean = false) => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-slate-700">Expense Breakdown</label>
+        <button
+          type="button"
+          onClick={() => setIsBreakdownExpanded(!isBreakdownExpanded)}
+          className="text-xs text-brandNavy hover:underline flex items-center gap-1"
+        >
+          {isBreakdownExpanded ? 'Collapse' : 'Expand'}
+          <svg className={`w-4 h-4 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
 
-  const getSubExpenseTotal = (expenseId: number) => {
-    const subs = subExpensesMap[expenseId] || [];
-    return subs.reduce((sum, se) => sum + Number(se.amount), 0);
-  };
+      <div className={`space-y-2 ${isBreakdownExpanded ? 'max-h-96 overflow-y-auto' : 'max-h-48 overflow-hidden'}`}>
+        {breakdownItems.map((item, index) => (
+          <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg flex-wrap">
+            <Input
+              placeholder="Name"
+              value={item.name}
+              onChange={(e) => updateBreakdownItem(index, 'name', e.target. value)}
+              disabled={readonly}
+              className="flex-1 min-w-[100px]"
+            />
+            <Input
+              type="number"
+              placeholder="Amount"
+              value={item.amount}
+              onChange={(e) => updateBreakdownItem(index, 'amount', e.target. value)}
+              disabled={readonly}
+              className="w-24"
+            />
+            <Input
+              type="date"
+              value={item.breakdown_date}
+              onChange={(e) => updateBreakdownItem(index, 'breakdown_date', e.target.value)}
+              disabled={readonly}
+              className="w-32"
+            />
+            <select
+              value={item.payment_method}
+              onChange={(e) => updateBreakdownItem(index, 'payment_method', e.target.value)}
+              disabled={readonly}
+              className="px-2 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="cash">Cash</option>
+              <option value="cheque">Cheque</option>
+              <option value="online">Online</option>
+              <option value="other">Other</option>
+            </select>
+            {! readonly && breakdownItems.length > 1 && (
+              <button type="button" onClick={() => removeBreakdownRow(index)} className="p-1 text-red-500 hover:text-red-700">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {! readonly && (
+        <Button type="button" variant="outline" size="sm" onClick={addBreakdownRow} className="w-full">
+          + Add Breakdown Item
+        </Button>
+      )}
+
+      <div className="text-right text-sm text-slate-600">
+        Breakdown Total: <span className="font-semibold text-brandNavy">{formatCurrency(breakdownTotal)}</span>
+      </div>
+    </div>
+  );
+
+  const renderReceiptsForm = (readonly: boolean = false) => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-slate-700">Receipts</label>
+        {!readonly && (
+          <Button type="button" variant="outline" size="sm" onClick={addReceiptRow}>
+            + Add Receipt
+          </Button>
+        )}
+      </div>
+      
+      {receiptItems.length > 0 ? (
+        <div className="space-y-2">
+          {receiptItems. map((item, index) => (
+            <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+              {readonly ?  (
+                <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex-1">
+                  {item. file_name}
+                </a>
+              ) : (
+                <>
+                  <Input
+                    placeholder="Receipt name"
+                    value={item. file_name}
+                    onChange={(e) => updateReceiptItem(index, 'file_name', e.target.value)}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="Receipt URL"
+                    value={item.file_url}
+                    onChange={(e) => updateReceiptItem(index, 'file_url', e.target. value)}
+                    className="flex-1"
+                  />
+                  <button type="button" onClick={() => removeReceiptRow(index)} className="p-1 text-red-500 hover:text-red-700">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500 italic">No receipts added</p>
+      )}
+    </div>
+  );
 
   if (isLoading && expenses.length === 0) {
     return (
@@ -371,280 +539,462 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Expense Management</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Track expenses with breakdown support
-          </p>
+          <p className="text-sm text-slate-500 mt-1">Track and manage all expenses</p>
         </div>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          Add Expense
-        </Button>
+        <Button onClick={openAddModal}>+ Add Expense</Button>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
+      {/* Search and Filter */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <div className="flex gap-4">
+          <div className="flex-1">
             <Input
-              placeholder="Search by vendor, description, category, or invoice..."
+              placeholder="Search expenses by name, description, category, or spender..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e. target.value)}
+              onChange={(e) => setSearchQuery(e.target. value)}
             />
           </div>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e. target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus: outline-none focus: ring-2 focus:ring-brandNavy/50"
-          >
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-200">
-          <h3 className="font-semibold text-slate-900">Expenses</h3>
-          <p className="text-xs text-slate-500 mt-1">Click on an expense to view/add breakdown</p>
+          <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6. 414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-. 707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filters
+          </Button>
         </div>
 
-        {expenses.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">
-            No expenses found
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200">
-            {expenses.map((expense) => {
-              const isExpanded = expandedExpenses.has(expense.id);
-              const subExpenses = subExpensesMap[expense.id] || [];
-              const subTotal = getSubExpenseTotal(expense.id);
-
-              return (
-                <div key={expense.id}>
-                  <div
-                    className="p-4 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => toggleExpense(expense. id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <svg
-                          className={'w-5 h-5 text-slate-400 transition-transform ' + (isExpanded ? 'rotate-90' : '')}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-900">{expense.vendor}</p>
-                            <Badge
-                              variant={
-                                expense.status === 'approved' ? 'success' : 
-                                expense. status === 'rejected' ? 'danger' :  'warning'
-                              }
-                            >
-                              {expense. status}
-                            </Badge>
-                            {subExpenses.length > 0 && (
-                              <Badge variant="info">{subExpenses.length} items</Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {expense.category_name} | {formatDate(expense.expense_date, 'dd MMM yyyy')}
-                            {expense.description && ' | ' + expense. description}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-right">
-                          <p className="font-semibold text-slate-900">{formatCurrency(expense.amount)}</p>
-                          {subExpenses.length > 0 && (
-                            <p className="text-xs text-purple-600">Breakdown:  {formatCurrency(subTotal)}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          {canApprove && expense.status === 'pending' && (
-                            <>
-                              <Button size="sm" variant="outline" onClick={() => handleApprove(expense)}>
-                                Approve
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => openRejectModal(expense)}>
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                          {(expense.created_by === user?. id || user?.role === 'admin') && expense.status === 'pending' && (
-                            <Button size="sm" variant="danger" onClick={() => handleDelete(expense)}>
-                              Delete
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="bg-slate-50 p-4 border-t border-slate-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-medium text-slate-700">Expense Breakdown</h4>
-                        <Button size="sm" onClick={() => openSubExpenseModal(expense)}>
-                          + Add Breakdown
-                        </Button>
-                      </div>
-
-                      {subExpenses.length === 0 ? (
-                        <p className="text-sm text-slate-500 italic">No breakdown added yet</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {subExpenses.map((se) => (
-                            <div
-                              key={se.id}
-                              className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200"
-                            >
-                              <div>
-                                <p className="font-medium text-slate-900">{se.name}</p>
-                                {se.description && <p className="text-xs text-slate-500">{se.description}</p>}
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-semibold text-purple-700">
-                                  {formatCurrency(Number(se.amount))}
-                                </span>
-                                <button
-                                  onClick={() => handleDeleteSubExpense(se.id, expense.id)}
-                                  className="text-red-500 hover:text-red-700 text-sm"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end pt-2 border-t border-slate-200">
-                            <p className="text-sm">
-                              <span className="text-slate-500">Breakdown Total: </span>
-                              <span className="font-semibold text-purple-700 ml-2">{formatCurrency(subTotal)}</span>
-                              {subTotal !== expense.amount && (
-                                <span className="text-xs text-amber-600 ml-2">
-                                  (Difference: {formatCurrency(Math.abs(expense.amount - subTotal))})
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {expense.rejection_reason && (
-                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <p className="text-sm text-red-700">
-                            <span className="font-medium">Rejection Reason:  </span> {expense.rejection_reason}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {showFilters && (
+          <div className="grid grid-cols-1 md: grid-cols-4 gap-4 pt-4 border-t border-slate-200">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Period</label>
+              <select
+                value={filters.period}
+                onChange={(e) => setFilters({ ...filters, period: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">All Time</option>
+                <option value="weekly">This Week</option>
+                <option value="monthly">This Month</option>
+                <option value="semester">This Semester</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+              <select
+                value={filters.category_id}
+                onChange={(e) => setFilters({ ...filters, category_id: e.target. value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">All Categories</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Source</label>
+              <Input
+                placeholder="Filter by source..."
+                value={filters.source}
+                onChange={(e) => setFilters({ ...filters, source: e.target.value })}
+              />
+            </div>
           </div>
         )}
       </div>
 
-      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Add New Expense" size="lg">
-        <form onSubmit={handleCreateSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md: grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Category *</label>
-              <select
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: e. target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus: outline-none focus: ring-2 focus:ring-brandNavy/50"
-                required
+      {/* Expense List */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {expenses.length === 0 ?  (
+          <div className="p-8 text-center text-slate-500">No expenses found</div>
+        ) : (
+          <div className="divide-y divide-slate-200">
+            {expenses.map((expense) => (
+              <div
+                key={expense.id}
+                className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                onClick={() => openViewModal(expense)}
               >
-                <option value="">Select category</option>
-                {categories. map((cat) => (
-                  <option key={cat. id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900">{expense.name}</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      {expense.category_name && (
+                        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{expense.category_name}</span>
+                      )}
+                      <span className="text-xs text-slate-400">{formatDate(expense.expense_date, 'dd MMM yyyy')}</span>
+                      {expense.budget_name && (
+                        <span className="text-xs text-blue-600">From:  {expense.budget_name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right flex items-center gap-4">
+                    <div>
+                      <p className="text-lg font-bold text-red-600">{formatCurrency(Number(expense.amount))}</p>
+                    </div>
+                    <Badge variant={getStatusBadgeVariant(expense.status)}>
+                      {expense.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Total */}
+      <div className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-lg font-medium text-slate-700">Total Expenses</span>
+          <span className="text-2xl font-bold text-red-600">{formatCurrency(total)}</span>
+        </div>
+      </div>
+
+      {/* Add Expense Modal */}
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Expense" size="lg">
+        <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+          <div className="grid grid-cols-1 md: grid-cols-2 gap-4">
+            <Input
+              label="Expense Name *"
+              value={formData.name}
+              onChange={(e) => setFormData({ ... formData, name: e.target.value })}
+              required
+            />
             <Input
               label="Amount *"
               type="number"
               step="0.01"
               value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target. value })}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md: grid-cols-2 gap-4">
-            <Input
-              label="Vendor / Payee *"
-              value={formData.vendor}
-              onChange={(e) => setFormData({ ...formData, vendor: e. target.value })}
-              required
-            />
-            <Input
-              label="Expense Date *"
-              type="date"
-              value={formData. expense_date}
-              onChange={(e) => setFormData({ ...formData, expense_date: e. target.value })}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               required
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Invoice Number"
-              value={formData.invoice_number}
-              onChange={(e) => setFormData({ ...formData, invoice_number:  e.target.value })}
-              placeholder="e.g., INV-2024-001"
-            />
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target. value })}
-                rows={2}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
-                placeholder="Describe the expense..."
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1">Against Budget</label>
+              <select
+                value={formData.budget_id}
+                onChange={(e) => setFormData({ ...formData, budget_id: e. target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">No specific budget</option>
+                {budgets.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name} ({formatCurrency(b.amount)})</option>
+                ))}
+              </select>
+              {formData.budget_id && formData.amount && (
+                <p className={`text-xs mt-1 ${getBudgetRemaining()!  >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  Remaining from budget: {formatCurrency(getBudgetRemaining()!)}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat. id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Add Expense
-            </Button>
+          <div className="grid grid-cols-1 md: grid-cols-2 gap-4">
+            <Input
+              label="Date"
+              type="date"
+              value={formData.expense_date}
+              onChange={(e) => setFormData({ ...formData, expense_date: e.target. value })}
+            />
+            <Input
+              label="Spender"
+              value={formData.spender}
+              onChange={(e) => setFormData({ ...formData, spender: e.target.value })}
+              placeholder="Who spent this?"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              placeholder="Expense description..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+            <select
+              value={formData.payment_method}
+              onChange={(e) => setFormData({ ...formData, payment_method: e. target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="cash">Cash</option>
+              <option value="cheque">Cheque</option>
+              <option value="online">Online</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {renderBreakdownForm(false)}
+          {renderReceiptsForm(false)}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
+            <Button type="submit" isLoading={isSubmitting}>Add Expense</Button>
           </div>
         </form>
       </Modal>
 
+      {/* View/Edit Expense Modal */}
+      <Modal isOpen={isViewModalOpen} onClose={() => { setIsViewModalOpen(false); setIsEditMode(false); }} title={isEditMode ? "Edit Expense" : "Expense Details"} size="lg">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+          {! isEditMode ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">{selectedExpense?.name}</h3>
+                <Badge variant={getStatusBadgeVariant(selectedExpense?.status || 'pending')}>
+                  {selectedExpense?.status}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-500">Amount</label>
+                  <p className="font-bold text-red-600 text-xl">{formatCurrency(Number(selectedExpense?.amount || 0))}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">Date</label>
+                  <p className="font-medium text-slate-900">{selectedExpense?.expense_date ?  formatDate(selectedExpense. expense_date, 'dd MMM yyyy') : 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-500">Category</label>
+                  <p className="font-medium text-slate-900">{selectedExpense?.category_name || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">Spender</label>
+                  <p className="font-medium text-slate-900">{selectedExpense?.spender || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500">Description</label>
+                <p className="font-medium text-slate-900">{selectedExpense?.description || 'N/A'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-500">Payment Method</label>
+                  <p className="font-medium text-slate-900 capitalize">{selectedExpense?.payment_method}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">Against Budget</label>
+                  <p className="font-medium text-slate-900">{selectedExpense?.budget_name || 'N/A'}</p>
+                  {selectedExpense?.budget_amount && (
+                    <p className="text-xs text-slate-500">
+                      Budget remaining: {formatCurrency(selectedExpense.budget_amount - Number(selectedExpense.amount))}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {selectedExpense?.breakdowns && selectedExpense.breakdowns.length > 0 && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-2 block">Breakdown</label>
+                  <div className="space-y-2">
+                    {selectedExpense. breakdowns.map((bd, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
+                        <div>
+                          <span className="font-medium">{bd.name}</span>
+                          {bd.breakdown_date && <span className="text-xs text-slate-500 ml-2">{formatDate(bd.breakdown_date, 'dd MMM')}</span>}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-slate-500 capitalize">{bd.payment_method}</span>
+                          <span className="font-semibold text-brandNavy">{formatCurrency(Number(bd.amount))}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedExpense?.receipts && selectedExpense.receipts.length > 0 && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-2 block">Receipts</label>
+                  <div className="space-y-2">
+                    {selectedExpense.receipts.map((r, idx) => (
+                      <div key={idx} className="p-2 bg-slate-50 rounded-lg">
+                        <a href={r.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {r. file_name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedExpense?.rejection_reason && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <label className="text-xs text-red-600 font-medium">Rejection Reason</label>
+                  <p className="text-sm text-red-700">{selectedExpense.rejection_reason}</p>
+                </div>
+              )}
+
+              <div className="flex justify-between gap-3 pt-4 border-t">
+                <div>
+                  {(user?.role === 'admin' || selectedExpense?.created_by === user?.id) && selectedExpense?.status === 'pending' && (
+                    <Button variant="danger" onClick={() => handleDelete(selectedExpense! .id)}>Delete</Button>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  {canApprove && selectedExpense?. status === 'pending' && (
+                    <>
+                      <Button variant="outline" onClick={() => handleApprove(selectedExpense!)}>Approve</Button>
+                      <Button variant="danger" onClick={() => setIsRejectModalOpen(true)}>Reject</Button>
+                    </>
+                  )}
+                  <Button variant="ghost" onClick={() => setIsViewModalOpen(false)}>Close</Button>
+                  {selectedExpense?.status === 'pending' && (
+                    <Button onClick={() => setIsEditMode(true)}>Edit</Button>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdate(); }} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Expense Name *"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ... formData, name: e.target.value })}
+                  required
+                />
+                <Input
+                  label="Amount *"
+                  type="number"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Against Budget</label>
+                  <select
+                    value={formData.budget_id}
+                    onChange={(e) => setFormData({ ...formData, budget_id: e. target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  >
+                    <option value="">No specific budget</option>
+                    {budgets.map((b) => (
+                      <option key={b.id} value={b. id}>{b.name} ({formatCurrency(b.amount)})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                  <select
+                    value={formData. category_id}
+                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat. id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Date"
+                  type="date"
+                  value={formData.expense_date}
+                  onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
+                />
+                <Input
+                  label="Spender"
+                  value={formData. spender}
+                  onChange={(e) => setFormData({ ... formData, spender: e. target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ... formData, description: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                <select
+                  value={formData.payment_method}
+                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="online">Online</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              {renderBreakdownForm(false)}
+              {renderReceiptsForm(false)}
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button type="button" variant="ghost" onClick={() => setIsEditMode(false)}>Cancel</Button>
+                <Button type="submit" isLoading={isSubmitting}>Save Changes</Button>
+              </div>
+            </form>
+          )}
+        </div>
+      </Modal>
+
+      {/* Reject Modal */}
       <Modal isOpen={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Expense" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Rejecting expense of <span className="font-semibold">{formatCurrency(selectedExpense?.amount || 0)}</span> from {selectedExpense?.vendor}
+            Rejecting expense:  <span className="font-semibold">{selectedExpense?. name}</span>
+          </p>
+          <p className="text-sm text-slate-600">
+            Amount: <span className="font-semibold text-red-600">{formatCurrency(selectedExpense?.amount || 0)}</span>
           </p>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Rejection Reason *</label>
@@ -652,101 +1002,23 @@ export default function ExpensesPage() {
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brandNavy/50"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               placeholder="Enter reason for rejection..."
               required
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <Button type="button" variant="ghost" onClick={() => setIsRejectModalOpen(false)}>
-              Cancel
-            </Button>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button type="button" variant="ghost" onClick={() => setIsRejectModalOpen(false)}>Cancel</Button>
             <Button
               variant="danger"
               onClick={handleReject}
               isLoading={isSubmitting}
-              disabled={!rejectReason.trim()}
+              disabled={!rejectReason. trim()}
             >
               Reject Expense
             </Button>
           </div>
         </div>
-      </Modal>
-
-      <Modal isOpen={isSubExpenseModalOpen} onClose={() => setIsSubExpenseModalOpen(false)} title="Add Expense Breakdown" size="lg">
-        <form onSubmit={handleSubmitSubExpenses} className="space-y-4">
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-            <p className="text-sm text-slate-700">
-              Adding breakdown for:  <span className="font-semibold">{selectedExpense?.vendor}</span>
-            </p>
-            <p className="text-sm text-slate-500">
-              Total Amount: <span className="font-semibold">{formatCurrency(selectedExpense?. amount || 0)}</span>
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {subExpenseItems.map((item, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-                <div className="flex-1">
-                  <Input
-                    placeholder="Item name (e.g., Refreshments)"
-                    value={item.name}
-                    onChange={(e) => updateSubExpenseItem(index, 'name', e.target. value)}
-                  />
-                </div>
-                <div className="w-32">
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="Amount"
-                    value={item. amount}
-                    onChange={(e) => updateSubExpenseItem(index, 'amount', e.target.value)}
-                  />
-                </div>
-                <div className="flex-1">
-                  <Input
-                    placeholder="Description (optional)"
-                    value={item.description}
-                    onChange={(e) => updateSubExpenseItem(index, 'description', e.target. value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeSubExpenseRow(index)}
-                  className="p-2 text-red-500 hover:text-red-700"
-                  disabled={subExpenseItems.length === 1}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-. 867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <Button type="button" variant="outline" onClick={addSubExpenseRow} className="w-full">
-            + Add Another Item
-          </Button>
-
-          <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-            <p className="text-sm text-purple-700">
-              Breakdown Total: <span className="font-semibold">
-                {formatCurrency(
-                  subExpenseItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
-                )}
-              </span>
-            </p>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-            <Button type="button" variant="ghost" onClick={() => setIsSubExpenseModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Save Breakdown
-            </Button>
-          </div>
-        </form>
       </Modal>
     </div>
   );

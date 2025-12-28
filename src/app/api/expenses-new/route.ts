@@ -8,15 +8,15 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json({ success: false, error:  'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = new URL(request.url);
-    const search = url. searchParams.get('search') || '';
-    const categoryId = url.searchParams. get('category_id');
+    const search = url.searchParams.get('search') || '';
+    const categoryId = url.searchParams.get('category_id');
     const status = url.searchParams.get('status');
-    const period = url.searchParams. get('period');
-    const budgetId = url. searchParams.get('budget_id');
+    const period = url.searchParams.get('period');
+    const budgetId = url.searchParams.get('budget_id');
 
     let expenses;
 
@@ -24,24 +24,27 @@ export async function GET(request: NextRequest) {
       expenses = await sql`
         SELECT 
           e.*,
-          c. name as category_name,
+          c.name as category_name,
           b.name as budget_name,
           b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
           u.name as created_by_name,
           COALESCE(
             (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
-             FROM expense_breakdowns eb WHERE eb.expense_id = e. id), '[]'
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
           ) as breakdowns,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er. file_name, 'file_url', er.file_url, 'file_type', er.file_type))
-             FROM expense_receipts_new er WHERE er. expense_id = e.id), '[]'
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
           ) as receipts
         FROM expenses_new e
-        LEFT JOIN categories c ON c.id = e. category_id
-        LEFT JOIN budgets b ON b. id = e.budget_id
-        LEFT JOIN users u ON u.id = e. created_by
-        WHERE e.department_id = ${user. department_id}
-          AND (e. name ILIKE ${'%' + search + '%'} OR e.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+        LEFT JOIN categories c ON c.id = e.category_id
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
+          AND (e.name ILIKE ${'%' + search + '%'} OR e.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
         ORDER BY e.expense_date DESC, e.created_at DESC
       `;
     } else if (categoryId) {
@@ -51,19 +54,22 @@ export async function GET(request: NextRequest) {
           c.name as category_name,
           b.name as budget_name,
           b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
           u.name as created_by_name,
           COALESCE(
             (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
-             FROM expense_breakdowns eb WHERE eb.expense_id = e. id), '[]'
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
           ) as breakdowns,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er. file_url, 'file_type', er.file_type))
-             FROM expense_receipts_new er WHERE er.expense_id = e. id), '[]'
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
           ) as receipts
         FROM expenses_new e
         LEFT JOIN categories c ON c.id = e.category_id
         LEFT JOIN budgets b ON b.id = e.budget_id
-        LEFT JOIN users u ON u. id = e.created_by
+        LEFT JOIN users u ON u.id = e.created_by
         WHERE e.department_id = ${user.department_id}
           AND e.category_id = ${parseInt(categoryId)}
         ORDER BY e.expense_date DESC, e.created_at DESC
@@ -75,20 +81,23 @@ export async function GET(request: NextRequest) {
           c.name as category_name,
           b.name as budget_name,
           b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
           u.name as created_by_name,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb. name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb. payment_method))
-             FROM expense_breakdowns eb WHERE eb. expense_id = e.id), '[]'
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
           ) as breakdowns,
           COALESCE(
             (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
-             FROM expense_receipts_new er WHERE er. expense_id = e.id), '[]'
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
           ) as receipts
         FROM expenses_new e
         LEFT JOIN categories c ON c.id = e.category_id
-        LEFT JOIN budgets b ON b. id = e.budget_id
-        LEFT JOIN users u ON u.id = e. created_by
-        WHERE e.department_id = ${user. department_id}
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
           AND e.status = ${status}
         ORDER BY e.expense_date DESC, e.created_at DESC
       `;
@@ -96,23 +105,26 @@ export async function GET(request: NextRequest) {
       expenses = await sql`
         SELECT 
           e.*,
-          c. name as category_name,
-          b. name as budget_name,
-          b. amount as budget_amount,
-          u. name as created_by_name,
+          c.name as category_name,
+          b.name as budget_name,
+          b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
+          u.name as created_by_name,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb. amount, 'breakdown_date', eb. breakdown_date, 'payment_method', eb.payment_method))
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
              FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
           ) as breakdowns,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er. file_type))
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
              FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
           ) as receipts
         FROM expenses_new e
-        LEFT JOIN categories c ON c. id = e.category_id
+        LEFT JOIN categories c ON c.id = e.category_id
         LEFT JOIN budgets b ON b.id = e.budget_id
         LEFT JOIN users u ON u.id = e.created_by
-        WHERE e. department_id = ${user.department_id}
+        WHERE e.department_id = ${user.department_id}
         ORDER BY e.expense_date DESC, e.created_at DESC
       `;
     }
@@ -120,17 +132,17 @@ export async function GET(request: NextRequest) {
     const totalResult = await sql`
       SELECT COALESCE(SUM(amount), 0) as total
       FROM expenses_new
-      WHERE department_id = ${user. department_id}
+      WHERE department_id = ${user.department_id}
     `;
 
     return NextResponse.json({
-      success:  true,
+      success: true,
       data: expenses,
-      total: Number(totalResult[0]?. total || 0),
+      total: Number(totalResult[0]?.total || 0),
     });
   } catch (err) {
-    console. error('Expenses GET error:', err);
-    return NextResponse. json({ success: false, error: 'Failed to fetch expenses' }, { status: 500 });
+    console.error('Expenses GET error:', err);
+    return NextResponse.json({ success: false, error: 'Failed to fetch expenses' }, { status: 500 });
   }
 }
 
@@ -144,8 +156,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, amount, budget_id, category_id, description, spender, payment_method, expense_date, breakdowns, receipts } = body;
 
-    if (! name || !amount) {
-      return NextResponse.json({ success: false, error:  'Name and amount are required' }, { status: 400 });
+    if (!name || !amount) {
+      return NextResponse.json({ success: false, error: 'Name and amount are required' }, { status: 400 });
     }
 
     const result = await sql`
@@ -183,7 +195,7 @@ export async function POST(request: NextRequest) {
         if (r.file_name && r.file_url) {
           await sql`
             INSERT INTO expense_receipts_new (expense_id, file_name, file_url, file_type, file_size)
-            VALUES (${expenseId}, ${r.file_name}, ${r. file_url}, ${r.file_type || null}, ${r.file_size || null})
+            VALUES (${expenseId}, ${r.file_name}, ${r.file_url}, ${r.file_type || null}, ${r.file_size || null})
           `;
         }
       }
@@ -214,7 +226,7 @@ export async function PUT(request: NextRequest) {
       UPDATE expenses_new
       SET 
         name = COALESCE(${name}, name),
-        amount = COALESCE(${amount ?  parseFloat(amount) : null}, amount),
+        amount = COALESCE(${amount ? parseFloat(amount) : null}, amount),
         budget_id = ${budget_id || null},
         category_id = ${category_id || null},
         description = COALESCE(${description}, description),
@@ -235,7 +247,7 @@ export async function PUT(request: NextRequest) {
     if (breakdowns && Array.isArray(breakdowns)) {
       await sql`DELETE FROM expense_breakdowns WHERE expense_id = ${parseInt(id)}`;
       for (const bd of breakdowns) {
-        if (bd. name && bd.amount) {
+        if (bd.name && bd.amount) {
           await sql`
             INSERT INTO expense_breakdowns (expense_id, name, amount, breakdown_date, payment_method)
             VALUES (${parseInt(id)}, ${bd.name}, ${parseFloat(bd.amount)}, ${bd.breakdown_date || null}, ${bd.payment_method || 'cash'})
@@ -247,7 +259,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: result[0] });
   } catch (err) {
     console.error('Expenses PUT error:', err);
-    return NextResponse.json({ success: false, error: 'Failed to update expense' }, { status:  500 });
+    return NextResponse.json({ success: false, error: 'Failed to update expense' }, { status: 500 });
   }
 }
 
@@ -255,14 +267,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json({ success: false, error:  'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = new URL(request.url);
-    const id = url. searchParams.get('id');
+    const id = url.searchParams.get('id');
 
     if (!id) {
-      return NextResponse. json({ success: false, error: 'Expense ID is required' }, { status:  400 });
+      return NextResponse.json({ success: false, error: 'Expense ID is required' }, { status: 400 });
     }
 
     await sql`DELETE FROM expenses_new WHERE id = ${parseInt(id)} AND department_id = ${user.department_id}`;
@@ -270,6 +282,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, message: 'Expense deleted successfully' });
   } catch (err) {
     console.error('Expenses DELETE error:', err);
-    return NextResponse.json({ success: false, error:  'Failed to delete expense' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to delete expense' }, { status: 500 });
   }
 }

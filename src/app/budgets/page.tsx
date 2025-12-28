@@ -6,17 +6,18 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
+import BreakdownModal from '@/components/ui/BreakdownModal';
 import { formatCurrency, formatDate, getCurrentFiscalYear, getFiscalYearOptions } from '@/lib/utils';
 
 interface BudgetBreakdown {
-  id?:  number;
-  name:  string;
+  id?: number;
+  name: string;
   amount: number | string;
   payment_method: string;
 }
 
 interface Budget {
-  id:  number;
+  id: number;
   name: string;
   amount: number;
   category_id: number | null;
@@ -33,7 +34,7 @@ interface Budget {
 }
 
 interface Category {
-  id:  number;
+  id: number;
   name: string;
 }
 
@@ -54,7 +55,7 @@ export default function BudgetsPage() {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
+  const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,12 +82,12 @@ export default function BudgetsPage() {
       if (filters.category_id) url += `category_id=${filters.category_id}&`;
       if (filters.source) url += `source=${encodeURIComponent(filters.source)}&`;
       if (filters.period) url += `period=${filters.period}&`;
-      if (filters.fiscal_year) url += `fiscal_year=${filters. fiscal_year}&`;
+      if (filters.fiscal_year) url += `fiscal_year=${filters.fiscal_year}&`;
 
       const response = await fetch(url, { credentials: 'include' });
       const result = await response.json();
       if (result.success) {
-        setBudgets(result. data || []);
+        setBudgets(result.data || []);
         setTotal(result.total || 0);
       }
     } catch (err) {
@@ -99,7 +100,7 @@ export default function BudgetsPage() {
   const fetchCategories = async () => {
     try {
       const response = await fetch('/api/categories', { credentials: 'include' });
-      const result = await response. json();
+      const result = await response.json();
       if (result.success) {
         setCategories(result.data || []);
       }
@@ -142,16 +143,16 @@ export default function BudgetsPage() {
     setSelectedBudget(budget);
     setFormData({
       name: budget.name,
-      amount: budget.amount. toString(),
-      category_id: budget. category_id?. toString() || '',
+      amount: budget.amount.toString(),
+      category_id: budget.category_id?.toString() || '',
       description: budget.description || '',
-      source: budget. source || '',
+      source: budget.source || '',
       payment_method: budget.payment_method,
-      budget_date: budget.budget_date. split('T')[0],
+      budget_date: budget.budget_date.split('T')[0],
     });
     setBreakdownItems(
-      budget.breakdowns && budget.breakdowns. length > 0
-        ? budget.breakdowns.map(b => ({ ... b, amount: b.amount. toString() }))
+      budget.breakdowns && budget.breakdowns.length > 0
+        ? budget.breakdowns.map(b => ({ ...b, amount: b.amount.toString() }))
         : [{ name: '', amount: '', payment_method: 'cash' }]
     );
     setIsEditMode(false);
@@ -160,30 +161,30 @@ export default function BudgetsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (! formData.name || ! formData.amount) return;
+    if (!formData.name || !formData.amount) return;
 
     setIsSubmitting(true);
     try {
       const validBreakdowns = breakdownItems.filter(b => b.name && b.amount);
       const payload = {
-        ... formData,
+        ...formData,
         amount: parseFloat(formData.amount),
-        category_id: formData.category_id ?  parseInt(formData. category_id) : null,
-        breakdowns: validBreakdowns. map(b => ({
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        breakdowns: validBreakdowns.map(b => ({
           name: b.name,
-          amount: parseFloat(b.amount. toString()),
-          payment_method: b. payment_method,
+          amount: parseFloat(b.amount.toString()),
+          payment_method: b.payment_method,
         })),
       };
 
       const response = await fetch('/api/budgets-new', {
         method: 'POST',
-        headers:  { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       });
 
-      const result = await response. json();
+      const result = await response.json();
       if (result.success) {
         setIsAddModalOpen(false);
         resetForm();
@@ -199,7 +200,7 @@ export default function BudgetsPage() {
   };
 
   const handleUpdate = async () => {
-    if (!selectedBudget || !formData.name || !formData. amount) return;
+    if (!selectedBudget || !formData.name || !formData.amount) return;
 
     setIsSubmitting(true);
     try {
@@ -208,9 +209,9 @@ export default function BudgetsPage() {
         id: selectedBudget.id,
         ...formData,
         amount: parseFloat(formData.amount),
-        category_id:  formData.category_id ? parseInt(formData.category_id) : null,
+        category_id: formData.category_id ? parseInt(formData.category_id) : null,
         breakdowns: validBreakdowns.map(b => ({
-          name: b. name,
+          name: b.name,
           amount: parseFloat(b.amount.toString()),
           payment_method: b.payment_method,
         })),
@@ -220,11 +221,11 @@ export default function BudgetsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body:  JSON.stringify(payload),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
-      if (result. success) {
+      if (result.success) {
         setIsViewModalOpen(false);
         setIsEditMode(false);
         fetchBudgets();
@@ -239,14 +240,14 @@ export default function BudgetsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (! confirm('Are you sure you want to delete this budget?')) return;
+    if (!confirm('Are you sure you want to delete this budget?')) return;
     try {
       const response = await fetch(`/api/budgets-new?id=${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
       const result = await response.json();
-      if (result. success) {
+      if (result.success) {
         setIsViewModalOpen(false);
         fetchBudgets();
       }
@@ -256,22 +257,22 @@ export default function BudgetsPage() {
   };
 
   const addBreakdownRow = () => {
-    setBreakdownItems([...breakdownItems, { name:  '', amount: '', payment_method: 'cash' }]);
+    setBreakdownItems([...breakdownItems, { name: '', amount: '', payment_method: 'cash' }]);
   };
 
   const removeBreakdownRow = (index: number) => {
-    if (breakdownItems. length > 1) {
+    if (breakdownItems.length > 1) {
       setBreakdownItems(breakdownItems.filter((_, i) => i !== index));
     }
   };
 
-  const updateBreakdownItem = (index:  number, field: keyof BudgetBreakdown, value:  string) => {
+  const updateBreakdownItem = (index: number, field: keyof BudgetBreakdown, value: string) => {
     const updated = [...breakdownItems];
     (updated[index] as any)[field] = value;
     setBreakdownItems(updated);
   };
 
-  const breakdownTotal = breakdownItems. reduce((sum, item) => sum + (parseFloat(item.amount. toString()) || 0), 0);
+  const breakdownTotal = breakdownItems.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
 
   const renderBreakdownForm = (readonly: boolean = false) => (
     <div className="space-y-3">
@@ -279,37 +280,38 @@ export default function BudgetsPage() {
         <label className="block text-sm font-medium text-slate-700">Budget Breakdown</label>
         <button
           type="button"
-          onClick={() => setIsBreakdownExpanded(!isBreakdownExpanded)}
-          className="text-xs text-brandNavy hover:underline flex items-center gap-1"
+          onClick={() => setIsBreakdownModalOpen(true)}
+          className="text-xs text-brandNavy hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-brandNavy/5 transition-colors"
         >
-          {isBreakdownExpanded ? 'Collapse' : 'Expand'}
-          <svg className={`w-4 h-4 transition-transform ${isBreakdownExpanded ?  'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
+          Expand
         </button>
       </div>
 
-      <div className={`space-y-2 ${isBreakdownExpanded ? 'max-h-96 overflow-y-auto' : 'max-h-48 overflow-hidden'}`}>
-        {breakdownItems. map((item, index) => (
+      {/* Inline breakdown items - always visible */}
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {breakdownItems.map((item, index) => (
           <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
             <Input
               placeholder="Name"
               value={item.name}
-              onChange={(e) => updateBreakdownItem(index, 'name', e. target.value)}
+              onChange={(e) => updateBreakdownItem(index, 'name', e.target.value)}
               disabled={readonly}
               className="flex-1"
             />
             <Input
               type="number"
               placeholder="Amount"
-              value={item. amount}
-              onChange={(e) => updateBreakdownItem(index, 'amount', e.target. value)}
+              value={item.amount}
+              onChange={(e) => updateBreakdownItem(index, 'amount', e.target.value)}
               disabled={readonly}
               className="w-28"
             />
             <select
               value={item.payment_method}
-              onChange={(e) => updateBreakdownItem(index, 'payment_method', e.target. value)}
+              onChange={(e) => updateBreakdownItem(index, 'payment_method', e.target.value)}
               disabled={readonly}
               className="px-2 py-2 border border-slate-300 rounded-lg text-sm"
             >
@@ -318,8 +320,8 @@ export default function BudgetsPage() {
               <option value="online">Online</option>
               <option value="other">Other</option>
             </select>
-            {! readonly && breakdownItems.length > 1 && (
-              <button type="button" onClick={() => removeBreakdownRow(index)} className="p-1 text-red-500 hover: text-red-700">
+            {!readonly && breakdownItems.length > 1 && (
+              <button type="button" onClick={() => removeBreakdownRow(index)} className="p-1 text-red-500 hover:text-red-700">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -329,7 +331,7 @@ export default function BudgetsPage() {
         ))}
       </div>
 
-      {! readonly && (
+      {!readonly && (
         <Button type="button" variant="outline" size="sm" onClick={addBreakdownRow} className="w-full">
           + Add Breakdown Item
         </Button>
@@ -338,6 +340,17 @@ export default function BudgetsPage() {
       <div className="text-right text-sm text-slate-600">
         Breakdown Total: <span className="font-semibold text-brandNavy">{formatCurrency(breakdownTotal)}</span>
       </div>
+
+      {/* Breakdown Modal for expanded view */}
+      <BreakdownModal
+        isOpen={isBreakdownModalOpen}
+        onClose={() => setIsBreakdownModalOpen(false)}
+        title="Budget Breakdown"
+        items={breakdownItems}
+        onItemsChange={setBreakdownItems}
+        readonly={readonly}
+        type="budget"
+      />
     </div>
   );
 
@@ -396,7 +409,7 @@ export default function BudgetsPage() {
               <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={filters.category_id}
-                onChange={(e) => setFilters({ ...filters, category_id: e. target.value })}
+                onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               >
                 <option value="">All Categories</option>
@@ -417,7 +430,7 @@ export default function BudgetsPage() {
               <label className="block text-xs font-medium text-slate-600 mb-1">Fiscal Year</label>
               <select
                 value={filters.fiscal_year}
-                onChange={(e) => setFilters({ ...filters, fiscal_year: e. target.value })}
+                onChange={(e) => setFilters({ ...filters, fiscal_year: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               >
                 {getFiscalYearOptions().map((fy) => (
@@ -436,7 +449,7 @@ export default function BudgetsPage() {
           <div className="divide-y divide-slate-200">
             {budgets.map((budget) => (
               <div
-                key={budget. id}
+                key={budget.id}
                 className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
                 onClick={() => openViewModal(budget)}
               >
@@ -480,7 +493,7 @@ export default function BudgetsPage() {
             <Input
               label="Budget Name *"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e. target.value })}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
             />
             <Input
@@ -498,7 +511,7 @@ export default function BudgetsPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
               <select
                 value={formData.category_id}
-                onChange={(e) => setFormData({ ... formData, category_id: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               >
                 <option value="">Select category</option>
@@ -511,7 +524,7 @@ export default function BudgetsPage() {
               label="Date"
               type="date"
               value={formData.budget_date}
-              onChange={(e) => setFormData({ ...formData, budget_date: e.target. value })}
+              onChange={(e) => setFormData({ ...formData, budget_date: e.target.value })}
             />
           </div>
 
@@ -519,7 +532,7 @@ export default function BudgetsPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e. target.value })}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               placeholder="Budget description..."
@@ -530,8 +543,8 @@ export default function BudgetsPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
               <select
-                value={formData. payment_method}
-                onChange={(e) => setFormData({ ...formData, payment_method: e. target.value })}
+                value={formData.payment_method}
+                onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               >
                 <option value="cash">Cash</option>
@@ -543,7 +556,7 @@ export default function BudgetsPage() {
             <Input
               label="Source (Where the money came from)"
               value={formData.source}
-              onChange={(e) => setFormData({ ... formData, source:  e.target.value })}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
               placeholder="e.g., College Fund, Sponsorship"
             />
           </div>
@@ -560,12 +573,12 @@ export default function BudgetsPage() {
       {/* View/Edit Budget Modal */}
       <Modal isOpen={isViewModalOpen} onClose={() => { setIsViewModalOpen(false); setIsEditMode(false); }} title={isEditMode ? "Edit Budget" : "Budget Details"} size="lg">
         <div className="space-y-4">
-          {! isEditMode ? (
+          {!isEditMode ? (
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-slate-500">Name</label>
-                  <p className="font-medium text-slate-900">{selectedBudget?. name}</p>
+                  <p className="font-medium text-slate-900">{selectedBudget?.name}</p>
                 </div>
                 <div>
                   <label className="text-xs text-slate-500">Amount</label>
@@ -580,7 +593,7 @@ export default function BudgetsPage() {
                 </div>
                 <div>
                   <label className="text-xs text-slate-500">Date</label>
-                  <p className="font-medium text-slate-900">{selectedBudget?.budget_date ?  formatDate(selectedBudget.budget_date, 'dd MMM yyyy') : 'N/A'}</p>
+                  <p className="font-medium text-slate-900">{selectedBudget?.budget_date ? formatDate(selectedBudget.budget_date, 'dd MMM yyyy') : 'N/A'}</p>
                 </div>
               </div>
 
@@ -600,7 +613,7 @@ export default function BudgetsPage() {
                 </div>
               </div>
 
-              {selectedBudget?.breakdowns && selectedBudget.breakdowns. length > 0 && (
+              {selectedBudget?.breakdowns && selectedBudget.breakdowns.length > 0 && (
                 <div>
                   <label className="text-xs text-slate-500 mb-2 block">Breakdown</label>
                   <div className="space-y-2">
@@ -618,7 +631,7 @@ export default function BudgetsPage() {
               )}
 
               <div className="flex justify-between gap-3 pt-4 border-t">
-                <Button variant="danger" onClick={() => handleDelete(selectedBudget! .id)}>Delete</Button>
+                <Button variant="danger" onClick={() => handleDelete(selectedBudget!.id)}>Delete</Button>
                 <div className="flex gap-3">
                   <Button variant="ghost" onClick={() => setIsViewModalOpen(false)}>Close</Button>
                   <Button onClick={() => setIsEditMode(true)}>Edit</Button>
@@ -649,7 +662,7 @@ export default function BudgetsPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
                   <select
                     value={formData.category_id}
-                    onChange={(e) => setFormData({ ... formData, category_id: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   >
                     <option value="">Select category</option>
@@ -662,7 +675,7 @@ export default function BudgetsPage() {
                   label="Date"
                   type="date"
                   value={formData.budget_date}
-                  onChange={(e) => setFormData({ ... formData, budget_date: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, budget_date: e.target.value })}
                 />
               </div>
 
@@ -670,7 +683,7 @@ export default function BudgetsPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target. value })}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
@@ -681,7 +694,7 @@ export default function BudgetsPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
                   <select
                     value={formData.payment_method}
-                    onChange={(e) => setFormData({ ...formData, payment_method: e.target. value })}
+                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   >
                     <option value="cash">Cash</option>
@@ -693,7 +706,7 @@ export default function BudgetsPage() {
                 <Input
                   label="Source"
                   value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e. target.value })}
+                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                 />
               </div>
 

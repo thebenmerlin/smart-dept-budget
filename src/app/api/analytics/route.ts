@@ -19,22 +19,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const fiscalYear = searchParams.get('fiscal_year') || getCurrentFiscalYear();
 
-    // Get overall budget summary
-    const budgetSummary = await sql`
+    // Get budget totals from new budgets table
+    const budgetTotals = await sql`
       SELECT 
-        COALESCE(SUM(bp.proposed_amount), 0) as total_proposed,
-        COALESCE(SUM(ba.allotted_amount), 0) as total_allotted
-      FROM categories c
-      LEFT JOIN budget_plans bp ON bp.category_id = c. id 
-        AND bp.fiscal_year = ${fiscalYear}
-        AND bp.department_id = ${user.department_id}
-      LEFT JOIN budget_allotments ba ON ba.category_id = c.id 
-        AND ba.fiscal_year = ${fiscalYear}
-        AND ba.department_id = ${user. department_id}
-      WHERE c.is_active = true
+        COALESCE(SUM(amount), 0) as total_budget,
+        COUNT(*) as budget_count
+      FROM budgets
+      WHERE department_id = ${user.department_id}
+        AND fiscal_year = ${fiscalYear}
+        AND status = 'active'
     `;
 
-    // Get expense summary
+    // Get expense summary from expenses_new table
     const expenseSummary = await sql`
       SELECT 
         COALESCE(SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END), 0) as total_spent,
@@ -43,20 +39,31 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
         COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_count,
         COUNT(*) as total_count
-      FROM expenses
+      FROM expenses_new
       WHERE department_id = ${user.department_id}
-        AND EXTRACT(YEAR FROM expense_date) >= CAST(SPLIT_PART(${fiscalYear}, '-', 1) AS INT)
     `;
 
-    // Get monthly trend
+    // Fall back to legacy tables if no data in new tables
+    let totalBudget = Number(budgetTotals[0]?.total_budget || 0);
+
+    if (totalBudget === 0) {
+      const legacyBudget = await sql`
+        SELECT COALESCE(SUM(ba.allotted_amount), 0) as total_allotted
+        FROM budget_allotments ba
+        WHERE ba.fiscal_year = ${fiscalYear}
+          AND ba.department_id = ${user.department_id}
+      `;
+      totalBudget = Number(legacyBudget[0]?.total_allotted || 0);
+    }
+
+    // Get monthly trend from expenses_new
     const monthlyTrend = await sql`
       SELECT 
         TO_CHAR(expense_date, 'Mon') as month,
         EXTRACT(MONTH FROM expense_date) as month_num,
         SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as total
-      FROM expenses
+      FROM expenses_new
       WHERE department_id = ${user.department_id}
-        AND EXTRACT(YEAR FROM expense_date) >= CAST(SPLIT_PART(${fiscalYear}, '-', 1) AS INT)
       GROUP BY TO_CHAR(expense_date, 'Mon'), EXTRACT(MONTH FROM expense_date)
       ORDER BY month_num
     `;
@@ -64,75 +71,160 @@ export async function GET(request: NextRequest) {
     // Get category breakdown
     const categoryBreakdown = await sql`
       SELECT 
-        c. name as category,
-        COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) as total,
-        COALESCE(ba.allotted_amount, 0) as allotted
+        c.name as category,
+        COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) as total
       FROM categories c
-      LEFT JOIN expenses e ON e.category_id = c. id 
-        AND e. department_id = ${user.department_id}
-      LEFT JOIN budget_allotments ba ON ba.category_id = c. id 
-        AND ba.fiscal_year = ${fiscalYear}
-        AND ba.department_id = ${user. department_id}
+      LEFT JOIN expenses_new e ON e.category_id = c.id 
+        AND e.department_id = ${user.department_id}
       WHERE c.is_active = true
-      GROUP BY c.id, c.name, ba.allotted_amount
+      GROUP BY c.id, c.name
+      HAVING COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0) > 0
       ORDER BY total DESC
+      LIMIT 6
     `;
 
-    // Get recent expenses
+    // Get recent activity (combined budgets and expenses)
+    const recentBudgets = await sql`
+      SELECT 
+        id, name, amount, created_at,
+        'budget_created' as activity_type,
+        status
+      FROM budgets
+      WHERE department_id = ${user.department_id}
+      ORDER BY created_at DESC
+      LIMIT 5
+    `;
+
     const recentExpenses = await sql`
       SELECT 
-        e.id, e.amount, e.vendor, e.expense_date, e.status, e.description,
-        c.name as category_name
-      FROM expenses e
-      JOIN categories c ON c.id = e.category_id
+        e.id, e.name, e.amount, e.created_at, e.status, e.expense_date,
+        CASE 
+          WHEN e.status = 'approved' THEN 'expense_approved'
+          WHEN e.status = 'rejected' THEN 'expense_rejected'
+          ELSE 'expense_created'
+        END as activity_type,
+        c.name as category_name,
+        b.name as budget_name
+      FROM expenses_new e
+      LEFT JOIN categories c ON c.id = e.category_id
+      LEFT JOIN budgets b ON b.id = e.budget_id
       WHERE e.department_id = ${user.department_id}
       ORDER BY e.created_at DESC
       LIMIT 5
     `;
 
-    // Get receipts count
-    const receiptsCount = await sql`
-      SELECT COUNT(*) as count
-      FROM expense_receipts er
-      JOIN expenses e ON e.id = er.expense_id
-      WHERE e.department_id = ${user.department_id}
+    // Combine and sort recent activity
+    const recentActivity = [
+      ...recentBudgets.map((b: any) => ({
+        id: b.id,
+        type: 'budget',
+        activity_type: b.activity_type,
+        name: b.name,
+        amount: Number(b.amount),
+        date: b.created_at,
+        status: b.status,
+      })),
+      ...recentExpenses.map((e: any) => ({
+        id: e.id,
+        type: 'expense',
+        activity_type: e.activity_type,
+        name: e.name,
+        amount: Number(e.amount),
+        date: e.created_at,
+        status: e.status,
+        category_name: e.category_name,
+        budget_name: e.budget_name,
+      })),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
+
+    // Get upcoming events (budget dates, expense breakdown dates in future)
+    const upcomingBudgetDates = await sql`
+      SELECT 
+        id, name, amount, budget_date as event_date,
+        'budget_date' as event_type
+      FROM budgets
+      WHERE department_id = ${user.department_id}
+        AND budget_date >= CURRENT_DATE
+        AND status = 'active'
+      ORDER BY budget_date ASC
+      LIMIT 5
     `;
 
-    const totalAllotted = Number(budgetSummary[0]?.total_allotted || 0);
+    const upcomingBreakdownDates = await sql`
+      SELECT 
+        eb.id, eb.name, eb.amount, eb.breakdown_date as event_date,
+        'breakdown_due' as event_type,
+        e.name as expense_name
+      FROM expense_breakdowns eb
+      JOIN expenses_new e ON e.id = eb.expense_id
+      WHERE e.department_id = ${user.department_id}
+        AND eb.breakdown_date >= CURRENT_DATE
+        AND e.status = 'pending'
+      ORDER BY eb.breakdown_date ASC
+      LIMIT 5
+    `;
+
+    const upcomingEvents = [
+      ...upcomingBudgetDates.map((b: any) => ({
+        id: b.id,
+        type: 'budget',
+        event_type: b.event_type,
+        name: b.name,
+        amount: Number(b.amount),
+        date: b.event_date,
+      })),
+      ...upcomingBreakdownDates.map((eb: any) => ({
+        id: eb.id,
+        type: 'breakdown',
+        event_type: eb.event_type,
+        name: eb.name,
+        amount: Number(eb.amount),
+        date: eb.event_date,
+        expense_name: eb.expense_name,
+      })),
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 5);
+
     const totalSpent = Number(expenseSummary[0]?.total_spent || 0);
-    const utilization = totalAllotted > 0 ? (totalSpent / totalAllotted) * 100 : 0;
+    const utilization = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
     return NextResponse.json({
       success: true,
       data: {
         fiscalYear,
         summary: {
-          totalProposed: Number(budgetSummary[0]?. total_proposed || 0),
-          totalAllotted,
+          totalBudget,
           totalSpent,
           pendingAmount: Number(expenseSummary[0]?.pending_amount || 0),
-          remaining: totalAllotted - totalSpent,
+          remaining: totalBudget - totalSpent,
           utilization,
           pendingCount: Number(expenseSummary[0]?.pending_count || 0),
           approvedCount: Number(expenseSummary[0]?.approved_count || 0),
           rejectedCount: Number(expenseSummary[0]?.rejected_count || 0),
-          receiptsCount:  Number(receiptsCount[0]?.count || 0),
+          budgetCount: Number(budgetTotals[0]?.budget_count || 0),
         },
-        monthlyTrend:  monthlyTrend. map((m) => ({
+        monthlyTrend: monthlyTrend.map((m: any) => ({
           month: m.month,
-          total: Number(m. total),
+          total: Number(m.total),
         })),
-        categoryBreakdown:  categoryBreakdown. map((c) => ({
-          category:  c.category,
+        categoryBreakdown: categoryBreakdown.map((c: any) => ({
+          category: c.category,
           total: Number(c.total),
-          allotted: Number(c.allotted),
         })),
-        recentExpenses,
+        recentActivity,
+        upcomingEvents,
+        recentExpenses: recentExpenses.map((e: any) => ({
+          id: e.id,
+          name: e.name,
+          amount: Number(e.amount),
+          expense_date: e.expense_date,
+          status: e.status,
+          category_name: e.category_name,
+        })),
       },
     });
   } catch (error) {
     console.error('Analytics API error:', error);
-    return NextResponse. json(
+    return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     );

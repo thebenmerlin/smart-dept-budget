@@ -77,7 +77,7 @@ export default function BudgetsPage() {
   const fetchBudgets = async () => {
     setIsLoading(true);
     try {
-      let url = '/api/budgets-new? ';
+      let url = '/api/budgets-new?';
       if (searchQuery) url += `search=${encodeURIComponent(searchQuery)}&`;
       if (filters.category_id) url += `category_id=${filters.category_id}&`;
       if (filters.source) url += `source=${encodeURIComponent(filters.source)}&`;

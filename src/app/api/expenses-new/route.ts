@@ -18,9 +18,137 @@ export async function GET(request: NextRequest) {
     const period = url.searchParams.get('period');
     const budgetId = url.searchParams.get('budget_id');
 
+    // Build period filter dates
+    const now = new Date();
+    let periodStartDate: Date | null = null;
+
+    if (period === 'weekly') {
+      periodStartDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'monthly') {
+      periodStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === 'semester') {
+      periodStartDate = now.getMonth() >= 6 ? new Date(now.getFullYear(), 6, 1) : new Date(now.getFullYear(), 0, 1);
+    } else if (period === 'annual') {
+      periodStartDate = new Date(now.getFullYear(), 0, 1);
+    }
+
     let expenses;
 
-    if (search) {
+    // Combined filters for search + category + status
+    if (search && categoryId && status) {
+      expenses = await sql`
+        SELECT 
+          e.*,
+          c.name as category_name,
+          b.name as budget_name,
+          b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
+          ) as breakdowns,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
+          ) as receipts
+        FROM expenses_new e
+        LEFT JOIN categories c ON c.id = e.category_id
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
+          AND (e.name ILIKE ${'%' + search + '%'} OR e.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND e.category_id = ${parseInt(categoryId)}
+          AND e.status = ${status}
+        ORDER BY e.expense_date DESC, e.created_at DESC
+      `;
+    } else if (search && categoryId) {
+      expenses = await sql`
+        SELECT 
+          e.*,
+          c.name as category_name,
+          b.name as budget_name,
+          b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
+          ) as breakdowns,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
+          ) as receipts
+        FROM expenses_new e
+        LEFT JOIN categories c ON c.id = e.category_id
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
+          AND (e.name ILIKE ${'%' + search + '%'} OR e.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND e.category_id = ${parseInt(categoryId)}
+        ORDER BY e.expense_date DESC, e.created_at DESC
+      `;
+    } else if (search && status) {
+      expenses = await sql`
+        SELECT 
+          e.*,
+          c.name as category_name,
+          b.name as budget_name,
+          b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
+          ) as breakdowns,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
+          ) as receipts
+        FROM expenses_new e
+        LEFT JOIN categories c ON c.id = e.category_id
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
+          AND (e.name ILIKE ${'%' + search + '%'} OR e.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND e.status = ${status}
+        ORDER BY e.expense_date DESC, e.created_at DESC
+      `;
+    } else if (categoryId && status) {
+      expenses = await sql`
+        SELECT 
+          e.*,
+          c.name as category_name,
+          b.name as budget_name,
+          b.amount as budget_amount,
+          CASE WHEN b.id IS NOT NULL THEN 
+            b.amount - COALESCE((SELECT SUM(exp.amount) FROM expenses_new exp WHERE exp.budget_id = b.id AND exp.status = 'approved'), 0)
+          ELSE NULL END as budget_remaining,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', eb.id, 'name', eb.name, 'amount', eb.amount, 'breakdown_date', eb.breakdown_date, 'payment_method', eb.payment_method))
+             FROM expense_breakdowns eb WHERE eb.expense_id = e.id), '[]'
+          ) as breakdowns,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', er.id, 'file_name', er.file_name, 'file_url', er.file_url, 'file_type', er.file_type))
+             FROM expense_receipts_new er WHERE er.expense_id = e.id), '[]'
+          ) as receipts
+        FROM expenses_new e
+        LEFT JOIN categories c ON c.id = e.category_id
+        LEFT JOIN budgets b ON b.id = e.budget_id
+        LEFT JOIN users u ON u.id = e.created_by
+        WHERE e.department_id = ${user.department_id}
+          AND e.category_id = ${parseInt(categoryId)}
+          AND e.status = ${status}
+        ORDER BY e.expense_date DESC, e.created_at DESC
+      `;
+    } else if (search) {
       expenses = await sql`
         SELECT 
           e.*,
@@ -129,16 +257,21 @@ export async function GET(request: NextRequest) {
       `;
     }
 
-    const totalResult = await sql`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM expenses_new
-      WHERE department_id = ${user.department_id}
-    `;
+    // Apply period filter by filtering results
+    let filteredExpenses = expenses;
+    if (periodStartDate) {
+      filteredExpenses = expenses.filter((e: any) => {
+        return new Date(e.expense_date) >= periodStartDate!;
+      });
+    }
+
+    // Calculate total from filtered expenses
+    const total = filteredExpenses.reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
 
     return NextResponse.json({
       success: true,
-      data: expenses,
-      total: Number(totalResult[0]?.total || 0),
+      data: filteredExpenses,
+      total: total,
     });
   } catch (err) {
     console.error('Expenses GET error:', err);

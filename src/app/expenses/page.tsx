@@ -100,11 +100,13 @@ export default function ExpensesPage() {
   ]);
 
   const [receiptItems, setReceiptItems] = useState<ExpenseReceipt[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const fetchExpenses = async () => {
     setIsLoading(true);
     try {
-      let url = '/api/expenses-new? ';
+      let url = '/api/expenses-new?';
       if (searchQuery) url += `search=${encodeURIComponent(searchQuery)}&`;
       if (filters.category_id) url += `category_id=${filters.category_id}&`;
       if (filters.status) url += `status=${filters.status}&`;
@@ -383,18 +385,68 @@ export default function ExpensesPage() {
     setBreakdownItems(updated);
   };
 
-  const addReceiptRow = () => {
-    setReceiptItems([...receiptItems, { file_name: '', file_url: '' }]);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    const uploadedReceipts: ExpenseReceipt[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // Validate file type
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        setUploadError(`Invalid file type for ${file.name}. Allowed: PNG, JPEG, PDF`);
+        continue;
+      }
+
+      // Validate file size (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError(`File ${file.name} exceeds 10MB limit`);
+        continue;
+      }
+
+      // Upload to Cloudinary via API
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          uploadedReceipts.push({
+            file_name: result.data.file_name,
+            file_url: result.data.file_url,
+            file_type: result.data.file_type,
+          });
+        } else {
+          setUploadError(result.error || `Failed to upload ${file.name}`);
+        }
+      } catch (err) {
+        console.error('Upload error:', err);
+        setUploadError(`Failed to upload ${file.name}. Please try again.`);
+      }
+    }
+
+    setReceiptItems([...receiptItems, ...uploadedReceipts]);
+    setIsUploading(false);
+
+    // Reset the file input
+    e.target.value = '';
   };
 
   const removeReceiptRow = (index: number) => {
     setReceiptItems(receiptItems.filter((_, i) => i !== index));
-  };
-
-  const updateReceiptItem = (index: number, field: keyof ExpenseReceipt, value: string) => {
-    const updated = [...receiptItems];
-    (updated[index] as any)[field] = value;
-    setReceiptItems(updated);
   };
 
   const breakdownTotal = breakdownItems.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
@@ -498,41 +550,64 @@ export default function ExpensesPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium text-slate-700">Receipts</label>
-        {!readonly && (
-          <Button type="button" variant="outline" size="sm" onClick={addReceiptRow}>
-            + Add Receipt
-          </Button>
-        )}
       </div>
+
+      {!readonly && (
+        <div className="space-y-2">
+          <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-brandNavy transition-colors">
+            <input
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/jpg,application/pdf"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="receipt-upload"
+              disabled={isUploading}
+            />
+            <label htmlFor="receipt-upload" className="cursor-pointer">
+              <div className="flex flex-col items-center gap-2">
+                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-sm text-slate-600">
+                  {isUploading ? 'Uploading...' : 'Click to upload receipts'}
+                </span>
+                <span className="text-xs text-slate-400">PNG, JPEG, or PDF (max 10MB)</span>
+              </div>
+            </label>
+          </div>
+          {uploadError && (
+            <p className="text-sm text-red-500">{uploadError}</p>
+          )}
+        </div>
+      )}
 
       {receiptItems.length > 0 ? (
         <div className="space-y-2">
           {receiptItems.map((item, index) => (
             <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-              {readonly ? (
-                <a href={item.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex-1">
-                  {item.file_name}
+              <div className="flex-1 flex items-center gap-2">
+                <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-sm text-slate-700 truncate">{item.file_name}</span>
+              </div>
+              {item.file_url && (
+                <a
+                  href={item.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors flex-shrink-0"
+                >
+                  View
                 </a>
-              ) : (
-                <>
-                  <Input
-                    placeholder="Receipt name"
-                    value={item.file_name}
-                    onChange={(e) => updateReceiptItem(index, 'file_name', e.target.value)}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="Receipt URL"
-                    value={item.file_url}
-                    onChange={(e) => updateReceiptItem(index, 'file_url', e.target.value)}
-                    className="flex-1"
-                  />
-                  <button type="button" onClick={() => removeReceiptRow(index)} className="p-1 text-red-500 hover:text-red-700">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </>
+              )}
+              {!readonly && (
+                <button type="button" onClick={() => removeReceiptRow(index)} className="p-1 text-red-500 hover:text-red-700 flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               )}
             </div>
           ))}
@@ -875,9 +950,23 @@ export default function ExpensesPage() {
                   <label className="text-xs text-slate-500 mb-2 block">Receipts</label>
                   <div className="space-y-2">
                     {selectedExpense.receipts.map((r, idx) => (
-                      <div key={idx} className="p-2 bg-slate-50 rounded-lg">
-                        <a href={r.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                          {r.file_name}
+                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-sm font-medium text-slate-700">{r.file_name}</span>
+                        </div>
+                        <a
+                          href={r.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          View Receipt
                         </a>
                       </div>
                     ))}

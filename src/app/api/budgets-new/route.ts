@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse. json({ success: false, error: 'Unauthorized' }, { status:  401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = new URL(request.url);
@@ -16,27 +16,37 @@ export async function GET(request: NextRequest) {
     const categoryId = url.searchParams.get('category_id');
     const source = url.searchParams.get('source');
     const period = url.searchParams.get('period');
-    const fiscalYear = url. searchParams.get('fiscal_year');
+    const fiscalYear = url.searchParams.get('fiscal_year');
 
-    let dateFilter = '';
+    // Build dynamic filter conditions
+    const conditions: string[] = [];
     const now = new Date();
-    
+
+    // Period filter
     if (period === 'weekly') {
-      const weekAgo = new Date(now. getTime() - 7 * 24 * 60 * 60 * 1000);
-      dateFilter = `AND b.budget_date >= '${weekAgo. toISOString().split('T')[0]}'`;
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      conditions.push(`b.budget_date >= '${weekAgo.toISOString().split('T')[0]}'`);
     } else if (period === 'monthly') {
-      const monthAgo = new Date(now.getFullYear(), now.getMonth(), 1);
-      dateFilter = `AND b.budget_date >= '${monthAgo.toISOString().split('T')[0]}'`;
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      conditions.push(`b.budget_date >= '${monthStart.toISOString().split('T')[0]}'`);
     } else if (period === 'semester') {
       const semesterStart = now.getMonth() >= 6 ? new Date(now.getFullYear(), 6, 1) : new Date(now.getFullYear(), 0, 1);
-      dateFilter = `AND b.budget_date >= '${semesterStart.toISOString().split('T')[0]}'`;
+      conditions.push(`b.budget_date >= '${semesterStart.toISOString().split('T')[0]}'`);
     } else if (period === 'annual' && fiscalYear) {
-      dateFilter = `AND b.fiscal_year = '${fiscalYear}'`;
+      conditions.push(`b.fiscal_year = '${fiscalYear}'`);
     }
 
+    // Fiscal year filter (when not using period=annual)
+    if (fiscalYear && period !== 'annual') {
+      conditions.push(`b.fiscal_year = '${fiscalYear}'`);
+    }
+
+    // Build WHERE clause addition
+    const filterClause = conditions.length > 0 ? 'AND ' + conditions.join(' AND ') : '';
+
     let budgets;
-    
-    if (search) {
+
+    if (search && categoryId && source) {
       budgets = await sql`
         SELECT 
           b.*,
@@ -47,7 +57,80 @@ export async function GET(request: NextRequest) {
              FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
           ) as breakdowns
         FROM budgets b
-        LEFT JOIN categories c ON c.id = b. category_id
+        LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN users u ON u.id = b.created_by
+        WHERE b.department_id = ${user.department_id}
+          AND (b.name ILIKE ${'%' + search + '%'} OR b.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND b.category_id = ${parseInt(categoryId)}
+          AND b.source ILIKE ${'%' + source + '%'}
+        ORDER BY b.budget_date DESC, b.created_at DESC
+      `;
+    } else if (search && categoryId) {
+      budgets = await sql`
+        SELECT 
+          b.*,
+          c.name as category_name,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+             FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
+          ) as breakdowns
+        FROM budgets b
+        LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN users u ON u.id = b.created_by
+        WHERE b.department_id = ${user.department_id}
+          AND (b.name ILIKE ${'%' + search + '%'} OR b.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND b.category_id = ${parseInt(categoryId)}
+        ORDER BY b.budget_date DESC, b.created_at DESC
+      `;
+    } else if (search && source) {
+      budgets = await sql`
+        SELECT 
+          b.*,
+          c.name as category_name,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+             FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
+          ) as breakdowns
+        FROM budgets b
+        LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN users u ON u.id = b.created_by
+        WHERE b.department_id = ${user.department_id}
+          AND (b.name ILIKE ${'%' + search + '%'} OR b.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
+          AND b.source ILIKE ${'%' + source + '%'}
+        ORDER BY b.budget_date DESC, b.created_at DESC
+      `;
+    } else if (categoryId && source) {
+      budgets = await sql`
+        SELECT 
+          b.*,
+          c.name as category_name,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+             FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
+          ) as breakdowns
+        FROM budgets b
+        LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN users u ON u.id = b.created_by
+        WHERE b.department_id = ${user.department_id}
+          AND b.category_id = ${parseInt(categoryId)}
+          AND b.source ILIKE ${'%' + source + '%'}
+        ORDER BY b.budget_date DESC, b.created_at DESC
+      `;
+    } else if (search) {
+      budgets = await sql`
+        SELECT 
+          b.*,
+          c.name as category_name,
+          u.name as created_by_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+             FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
+          ) as breakdowns
+        FROM budgets b
+        LEFT JOIN categories c ON c.id = b.category_id
         LEFT JOIN users u ON u.id = b.created_by
         WHERE b.department_id = ${user.department_id}
           AND (b.name ILIKE ${'%' + search + '%'} OR b.description ILIKE ${'%' + search + '%'} OR c.name ILIKE ${'%' + search + '%'})
@@ -60,7 +143,7 @@ export async function GET(request: NextRequest) {
           c.name as category_name,
           u.name as created_by_name,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', bb. id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
              FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
           ) as breakdowns
         FROM budgets b
@@ -74,16 +157,16 @@ export async function GET(request: NextRequest) {
       budgets = await sql`
         SELECT 
           b.*,
-          c. name as category_name,
-          u. name as created_by_name,
+          c.name as category_name,
+          u.name as created_by_name,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb. amount, 'payment_method', bb. payment_method))
-             FROM budget_breakdowns bb WHERE bb. budget_id = b.id), '[]'
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+             FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
           ) as breakdowns
         FROM budgets b
         LEFT JOIN categories c ON c.id = b.category_id
         LEFT JOIN users u ON u.id = b.created_by
-        WHERE b. department_id = ${user.department_id}
+        WHERE b.department_id = ${user.department_id}
           AND b.source ILIKE ${'%' + source + '%'}
         ORDER BY b.budget_date DESC, b.created_at DESC
       `;
@@ -94,31 +177,53 @@ export async function GET(request: NextRequest) {
           c.name as category_name,
           u.name as created_by_name,
           COALESCE(
-            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb. name, 'amount', bb.amount, 'payment_method', bb.payment_method))
+            (SELECT json_agg(json_build_object('id', bb.id, 'name', bb.name, 'amount', bb.amount, 'payment_method', bb.payment_method))
              FROM budget_breakdowns bb WHERE bb.budget_id = b.id), '[]'
           ) as breakdowns
         FROM budgets b
-        LEFT JOIN categories c ON c. id = b.category_id
-        LEFT JOIN users u ON u.id = b. created_by
-        WHERE b.department_id = ${user. department_id}
+        LEFT JOIN categories c ON c.id = b.category_id
+        LEFT JOIN users u ON u.id = b.created_by
+        WHERE b.department_id = ${user.department_id}
         ORDER BY b.budget_date DESC, b.created_at DESC
       `;
     }
 
-    const totalResult = await sql`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM budgets
-      WHERE department_id = ${user.department_id}
-    `;
+    // Apply period/fiscal year filter by filtering results
+    let filteredBudgets = budgets;
+    if (conditions.length > 0) {
+      filteredBudgets = budgets.filter((b: any) => {
+        let passes = true;
+        
+        if (period === 'weekly') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          passes = passes && new Date(b.budget_date) >= weekAgo;
+        } else if (period === 'monthly') {
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          passes = passes && new Date(b.budget_date) >= monthStart;
+        } else if (period === 'semester') {
+          const semesterStart = now.getMonth() >= 6 ? new Date(now.getFullYear(), 6, 1) : new Date(now.getFullYear(), 0, 1);
+          passes = passes && new Date(b.budget_date) >= semesterStart;
+        }
+        
+        if (fiscalYear) {
+          passes = passes && b.fiscal_year === fiscalYear;
+        }
+        
+        return passes;
+      });
+    }
+
+    // Calculate total from filtered budgets
+    const total = filteredBudgets.reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0);
 
     return NextResponse.json({
       success: true,
-      data:  budgets,
-      total: Number(totalResult[0]?.total || 0),
+      data: filteredBudgets,
+      total: total,
     });
   } catch (err) {
     console.error('Budgets GET error:', err);
-    return NextResponse. json({ success: false, error: 'Failed to fetch budgets' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to fetch budgets' }, { status: 500 });
   }
 }
 

@@ -145,7 +145,7 @@ export default function LoginPage() {
                 {[
                   { email: 'admin@rscoe.edu.in', role: 'Admin' },
                   { email: 'hod@rscoe.edu.in', role: 'HOD' },
-                  { email: 'staff@rscoe. edu.in', role: 'Staff' },
+                  { email: 'staff@rscoe.edu.in', role: 'Staff' },
                 ].map((cred) => (
                   <button
                     key={cred.email}

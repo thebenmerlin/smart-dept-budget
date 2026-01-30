@@ -2,292 +2,187 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser, canPerformAction } from '@/lib/auth';
 import { formatCurrency, formatDate, getCurrentFiscalYear } from '@/lib/utils';
+import { generateBudgetReportExcel, generateExpenseReportExcel } from '@/lib/excel';
+import { generateBudgetReportPDF, generateExpenseReportPDF } from '@/lib/pdf-report';
 
 export const dynamic = 'force-dynamic';
+
+const COLLEGE_NAME = "JSPM's Rajarshi Shahu College of Engineering";
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
 
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json({ success: false, error:  'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!canPerformAction(user. role, 'download_reports')) {
+    if (!canPerformAction(user.role, 'download_reports')) {
       return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
     }
 
     const body = await request.json();
-    const { type, fiscal_year, format = 'csv' } = body;
-    const fiscalYear = fiscal_year || getCurrentFiscalYear();
+    const { type, format = 'excel', from_month, to_month, from_year, to_year, year } = body;
+    const reportFromYear = from_year || year || new Date().getFullYear().toString();
+    const reportToYear = to_year || reportFromYear;
 
-    let data: any[] = [];
-    let headers: string[] = [];
+    // Build date range
+    const fromDate = from_month ? new Date(parseInt(reportFromYear), parseInt(from_month) - 1, 1) : null;
+    const toDate = to_month ? new Date(parseInt(reportToYear), parseInt(to_month), 0) : null;
+
+    // Build date range string for display
+    let dateRangeStr = `Year ${reportFromYear}${reportFromYear !== reportToYear ? ' - ' + reportToYear : ''}`;
+    if (from_month && to_month) {
+      if (from_month === to_month && reportFromYear === reportToYear) {
+        dateRangeStr = `${MONTH_NAMES[parseInt(from_month) - 1]} ${reportFromYear}`;
+      } else if (reportFromYear === reportToYear) {
+        dateRangeStr = `${MONTH_NAMES[parseInt(from_month) - 1]} - ${MONTH_NAMES[parseInt(to_month) - 1]} ${reportFromYear}`;
+      } else {
+        dateRangeStr = `${MONTH_NAMES[parseInt(from_month) - 1]} ${reportFromYear} - ${MONTH_NAMES[parseInt(to_month) - 1]} ${reportToYear}`;
+      }
+    }
+
+    // Fetch department name
+    const deptResult = await sql`SELECT name FROM departments WHERE id = ${user.department_id}`;
+    const departmentName = deptResult.length > 0 ? deptResult[0].name : 'Department';
+
+    const reportOptions = {
+      collegeName: COLLEGE_NAME,
+      departmentName: `Department: ${departmentName}`,
+      dateRange: dateRangeStr,
+      generatedBy: user.name,
+      generatedAt: formatDate(new Date(), 'dd MMM yyyy HH:mm'),
+    };
+
     let filename = '';
-    let title = '';
+    let contentType = '';
+    let buffer: Buffer;
 
-    switch (type) {
-      case 'monthly':  {
-        const result = await sql`
+    if (type === 'budget') {
+      // Fetch budget data
+      let data: any[];
+      if (fromDate && toDate) {
+        data = await sql`
           SELECT 
-            TO_CHAR(expense_date, 'Mon YYYY') as month,
-            c.name as category,
-            COUNT(*)::int as transactions,
-            SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END)::numeric as approved_amount
-          FROM expenses e
-          JOIN categories c ON c.id = e. category_id
-          WHERE e.department_id = ${user.department_id}
-          GROUP BY TO_CHAR(expense_date, 'Mon YYYY'), c.name
-          ORDER BY MIN(expense_date) DESC
+            b.budget_date,
+            b.name,
+            c.name as category_name,
+            b.amount,
+            b.source,
+            b.payment_method,
+            b.status
+          FROM budgets b
+          LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.department_id = ${user.department_id}
+            AND b.budget_date >= ${fromDate.toISOString().split('T')[0]}
+            AND b.budget_date <= ${toDate.toISOString().split('T')[0]}
+          ORDER BY b.budget_date DESC
         `;
-        
-        headers = ['Month', 'Category', 'Transactions', 'Approved Amount'];
-        data = result.map(r => ({
-          month: r.month,
-          category: r.category,
-          transactions:  r.transactions,
-          approved_amount:  formatCurrency(Number(r.approved_amount))
-        }));
-        filename = `monthly-report-${fiscalYear}`;
-        title = `Monthly Expense Report - FY ${fiscalYear}`;
-        break;
+      } else {
+        data = await sql`
+          SELECT 
+            b.budget_date,
+            b.name,
+            c.name as category_name,
+            b.amount,
+            b.source,
+            b.payment_method,
+            b.status
+          FROM budgets b
+          LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.department_id = ${user.department_id}
+            AND EXTRACT(YEAR FROM b.budget_date) = ${parseInt(reportFromYear)}
+          ORDER BY b.budget_date DESC
+        `;
       }
 
-      case 'category': {
-        const result = await sql`
-          SELECT 
-            c.name as category,
-            COALESCE(bp.proposed_amount, 0)::numeric as proposed,
-            COALESCE(ba.allotted_amount, 0)::numeric as allotted,
-            COALESCE(SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END), 0)::numeric as spent
-          FROM categories c
-          LEFT JOIN budget_plans bp ON bp.category_id = c.id 
-            AND bp.fiscal_year = ${fiscalYear} AND bp.department_id = ${user.department_id}
-          LEFT JOIN budget_allotments ba ON ba.category_id = c.id 
-            AND ba. fiscal_year = ${fiscalYear} AND ba.department_id = ${user.department_id}
-          LEFT JOIN expenses e ON e.category_id = c.id AND e.department_id = ${user.department_id}
-          WHERE c.is_active = true
-          GROUP BY c.id, c.name, bp.proposed_amount, ba.allotted_amount
-          ORDER BY c.name
-        `;
-        
-        headers = ['Category', 'Proposed', 'Allotted', 'Spent', 'Remaining', 'Utilization'];
-        data = result.map(r => {
-          const allotted = Number(r.allotted);
-          const spent = Number(r.spent);
-          const remaining = allotted - spent;
-          const util = allotted > 0 ? ((spent / allotted) * 100).toFixed(1) + '%' : '0%';
-          return {
-            category:  r.category,
-            proposed: formatCurrency(Number(r.proposed)),
-            allotted: formatCurrency(allotted),
-            spent: formatCurrency(spent),
-            remaining: formatCurrency(remaining),
-            utilization: util
-          };
-        });
-        filename = `category-report-${fiscalYear}`;
-        title = `Category-wise Budget Report - FY ${fiscalYear}`;
-        break;
-      }
+      const options = { ...reportOptions, title: 'Budget Report' };
 
-      case 'budget': {
-        const result = await sql`
-          SELECT 
-            c.name as category,
-            COALESCE(bp.proposed_amount, 0)::numeric as proposed,
-            COALESCE(ba. allotted_amount, 0)::numeric as allotted
-          FROM categories c
-          LEFT JOIN budget_plans bp ON bp. category_id = c.id 
-            AND bp.fiscal_year = ${fiscalYear} AND bp. department_id = ${user.department_id}
-          LEFT JOIN budget_allotments ba ON ba.category_id = c. id 
-            AND ba.fiscal_year = ${fiscalYear} AND ba.department_id = ${user.department_id}
-          WHERE c. is_active = true
-          ORDER BY c.name
-        `;
-        
-        headers = ['Category', 'Proposed', 'Allotted', 'Variance', 'Status'];
-        data = result.map(r => {
-          const proposed = Number(r. proposed);
-          const allotted = Number(r.allotted);
-          const variance = allotted - proposed;
-          return {
-            category:  r.category,
-            proposed: formatCurrency(proposed),
-            allotted:  formatCurrency(allotted),
-            variance: (variance >= 0 ? '+' : '') + formatCurrency(variance),
-            status: variance >= 0 ?  'Surplus' : 'Deficit'
-          };
-        });
-        filename = `budget-variance-${fiscalYear}`;
-        title = `Budget Variance Report - FY ${fiscalYear}`;
-        break;
+      if (format === 'excel') {
+        buffer = await generateBudgetReportExcel(data, options);
+        filename = `budget-report-${reportFromYear}${reportFromYear !== reportToYear ? '-' + reportToYear : ''}.xlsx`;
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      } else {
+        buffer = await generateBudgetReportPDF(data, options);
+        filename = `budget-report-${reportFromYear}${reportFromYear !== reportToYear ? '-' + reportToYear : ''}.pdf`;
+        contentType = 'application/pdf';
       }
-
-      case 'vendor': {
-        const result = await sql`
-          SELECT 
-            e.vendor,
-            COUNT(*)::int as transactions,
-            SUM(CASE WHEN e.status = 'approved' THEN e.amount ELSE 0 END)::numeric as approved,
-            SUM(CASE WHEN e.status = 'pending' THEN e. amount ELSE 0 END)::numeric as pending,
-            SUM(e.amount)::numeric as total
-          FROM expenses e
-          WHERE e.department_id = ${user.department_id}
-          GROUP BY e.vendor
-          ORDER BY SUM(e.amount) DESC
-        `;
-        
-        headers = ['Vendor', 'Transactions', 'Approved', 'Pending', 'Total'];
-        data = result.map(r => ({
-          vendor: r.vendor,
-          transactions:  r.transactions,
-          approved: formatCurrency(Number(r.approved)),
-          pending: formatCurrency(Number(r. pending)),
-          total: formatCurrency(Number(r.total))
-        }));
-        filename = `vendor-report-${fiscalYear}`;
-        title = `Vendor-wise Expense Report - FY ${fiscalYear}`;
-        break;
-      }
-
-      case 'audit': {
-        const result = await sql`
-          SELECT 
-            al.created_at,
-            COALESCE(u.name, 'System') as user_name,
-            al.action,
-            al.entity_type,
-            al.entity_id
-          FROM audit_logs al
-          LEFT JOIN users u ON u. id = al.user_id
-          ORDER BY al.created_at DESC
-          LIMIT 500
-        `;
-        
-        headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID'];
-        data = result.map(r => ({
-          timestamp: formatDate(r.created_at, 'dd MMM yyyy HH:mm'),
-          user_name: r.user_name,
-          action: r.action,
-          entity_type: r.entity_type,
-          entity_id: r.entity_id || '-'
-        }));
-        filename = `audit-report-${fiscalYear}`;
-        title = `Audit Trail Report`;
-        break;
-      }
-
-      case 'expenses':
-      case 'summary':  {
-        const result = await sql`
+    } else if (type === 'expense') {
+      // Fetch expense data with budget info
+      let data: any[];
+      if (fromDate && toDate) {
+        data = await sql`
           SELECT 
             e.expense_date,
-            c.name as category,
-            e.vendor,
-            e. description,
-            e. amount,
+            e.name,
+            e.amount,
+            b.name as budget_name,
+            c.name as category_name,
+            e.spender,
+            e.payment_method,
             e.status
-          FROM expenses e
-          JOIN categories c ON c.id = e.category_id
+          FROM expenses_new e
+          LEFT JOIN budgets b ON b.id = e.budget_id
+          LEFT JOIN categories c ON c.id = e.category_id
           WHERE e.department_id = ${user.department_id}
+            AND e.expense_date >= ${fromDate.toISOString().split('T')[0]}
+            AND e.expense_date <= ${toDate.toISOString().split('T')[0]}
           ORDER BY e.expense_date DESC
         `;
-        
-        headers = ['Date', 'Category', 'Vendor', 'Description', 'Amount', 'Status'];
-        data = result.map(r => ({
-          date: formatDate(r.expense_date, 'dd MMM yyyy'),
-          category: r.category,
-          vendor: r.vendor,
-          description: r.description || '-',
-          amount:  formatCurrency(Number(r.amount)),
-          status: r.status
-        }));
-        filename = `expenses-report-${fiscalYear}`;
-        title = `Expenses Report - FY ${fiscalYear}`;
-        break;
+      } else {
+        data = await sql`
+          SELECT 
+            e.expense_date,
+            e.name,
+            e.amount,
+            b.name as budget_name,
+            c.name as category_name,
+            e.spender,
+            e.payment_method,
+            e.status
+          FROM expenses_new e
+          LEFT JOIN budgets b ON b.id = e.budget_id
+          LEFT JOIN categories c ON c.id = e.category_id
+          WHERE e.department_id = ${user.department_id}
+            AND EXTRACT(YEAR FROM e.expense_date) = ${parseInt(reportFromYear)}
+          ORDER BY e.expense_date DESC
+        `;
       }
 
-      default:
-        return NextResponse.json(
-          { success:  false, error: `Unknown report type: ${type}` },
-          { status: 400 }
-        );
-    }
+      const options = { ...reportOptions, title: 'Expense Report' };
 
-    // Generate output based on format
-    if (format === 'pdf') {
-      // Generate text-based PDF content
-      const pdfLines:  string[] = [];
-      
-      pdfLines.push("JSPM's Rajarshi Shahu College of Engineering");
-      pdfLines.push("Department of Computer Science and Business Systems");
-      pdfLines.push("");
-      pdfLines. push("=" . repeat(70));
-      pdfLines.push(title);
-      pdfLines.push("=".repeat(70));
-      pdfLines.push("");
-      pdfLines.push(`Fiscal Year: ${fiscalYear}`);
-      pdfLines.push(`Department: CSBS`);
-      pdfLines.push(`Generated: ${formatDate(new Date(), 'dd MMM yyyy HH:mm')}`);
-      pdfLines.push(`Generated By: ${user.name}`);
-      pdfLines.push("");
-      pdfLines.push("-".repeat(70));
-      pdfLines.push(headers.join(" | "));
-      pdfLines.push("-".repeat(70));
-      
-      const keys = Object.keys(data[0] || {});
-      for (const row of data) {
-        pdfLines.push(keys.map(k => String(row[k] || '-').substring(0, 12)).join(" | "));
+      if (format === 'excel') {
+        buffer = await generateExpenseReportExcel(data, options);
+        filename = `expense-report-${reportFromYear}${reportFromYear !== reportToYear ? '-' + reportToYear : ''}.xlsx`;
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      } else {
+        buffer = await generateExpenseReportPDF(data, options);
+        filename = `expense-report-${reportFromYear}${reportFromYear !== reportToYear ? '-' + reportToYear : ''}.pdf`;
+        contentType = 'application/pdf';
       }
-      
-      pdfLines.push("-".repeat(70));
-      pdfLines.push(`Total Records: ${data.length}`);
-      pdfLines.push("");
-      pdfLines.push("--- End of Report ---");
-      
-      const textContent = pdfLines.join("\n");
-      
-      // Return as downloadable text file (more reliable than complex PDF)
-      return new NextResponse(textContent, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}. txt"`,
-        },
-      });
     } else {
-      // Generate CSV
-      const keys = headers.map((h, i) => Object.keys(data[0] || {})[i] || h. toLowerCase().replace(/ /g, '_'));
-      const csvRows = [headers.map(h => `"${h}"`).join(',')];
-      
-      for (const row of data) {
-        const rowValues = Object.values(row).map((cell:  any) => {
-          const str = String(cell ??  '');
-          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return `"${str}"`;
-        });
-        csvRows. push(rowValues. join(','));
-      }
-      
-      const csvContent = csvRows.join('\n');
-
-      return new NextResponse(csvContent, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}.csv"`,
-        },
-      });
+      return NextResponse.json(
+        { success: false, error: `Unknown report type: ${type}` },
+        { status: 400 }
+      );
     }
 
-  } catch (error:  any) {
+    return new NextResponse(new Uint8Array(buffer), {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    });
+
+  } catch (error: any) {
     console.error('Report download error:', error);
-    return NextResponse. json(
-      { success: false, error: 'Report generation failed:  ' + (error.message || 'Unknown error') },
-      { status:  500 }
+    return NextResponse.json(
+      { success: false, error: 'Report generation failed: ' + (error.message || 'Unknown error') },
+      { status: 500 }
     );
   }
 }

@@ -2,10 +2,10 @@ import { format, parseISO } from 'date-fns';
 
 // Format currency in Indian Rupees
 export function formatCurrency(amount: number): string {
-  return new Intl. NumberFormat('en-IN', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency:  'INR',
-    minimumFractionDigits:  0,
+    currency: 'INR',
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount);
 }
@@ -13,15 +13,23 @@ export function formatCurrency(amount: number): string {
 // Format currency in Lakhs
 export function formatInLakhs(amount: number): string {
   const lakhs = amount / 100000;
-  return `₹${lakhs. toFixed(2)}L`;
+  return `₹${lakhs.toFixed(2)}L`;
 }
 
 // Format date
-export function formatDate(date: string | Date, formatStr: string = 'dd MMM yyyy'): string {
-  if (typeof date === 'string') {
-    return format(parseISO(date), formatStr);
+export function formatDate(date: string | Date | null | undefined, formatStr: string = 'dd MMM yyyy'): string {
+  if (!date) return '-';
+  try {
+    if (typeof date === 'string') {
+      const parsed = parseISO(date);
+      if (isNaN(parsed.getTime())) return '-';
+      return format(parsed, formatStr);
+    }
+    if (isNaN(date.getTime())) return '-';
+    return format(date, formatStr);
+  } catch {
+    return '-';
   }
-  return format(date, formatStr);
 }
 
 // Get current fiscal year
@@ -29,7 +37,7 @@ export function getCurrentFiscalYear(): string {
   const now = new Date();
   const month = now.getMonth();
   const year = now.getFullYear();
-  
+
   // Fiscal year starts in April
   if (month >= 3) { // April onwards
     return `${year}-${(year + 1).toString().slice(-2)}`;
@@ -40,14 +48,14 @@ export function getCurrentFiscalYear(): string {
 
 // Get fiscal year options
 export function getFiscalYearOptions(count: number = 5): string[] {
-  const options:  string[] = [];
+  const options: string[] = [];
   const currentYear = new Date().getFullYear();
-  
+
   for (let i = -1; i < count; i++) {
     const year = currentYear - i;
     options.push(`${year}-${(year + 1).toString().slice(-2)}`);
   }
-  
+
   return options;
 }
 
@@ -58,8 +66,8 @@ export function calculateVariance(proposed: number, allotted: number): {
   type: 'surplus' | 'deficit' | 'balanced';
 } {
   const amount = allotted - proposed;
-  const percentage = proposed > 0 ?  (amount / proposed) * 100 :  0;
-  
+  const percentage = proposed > 0 ? (amount / proposed) * 100 : 0;
+
   let type: 'surplus' | 'deficit' | 'balanced';
   if (amount > 0) {
     type = 'surplus';
@@ -68,19 +76,19 @@ export function calculateVariance(proposed: number, allotted: number): {
   } else {
     type = 'balanced';
   }
-  
+
   return { amount, percentage, type };
 }
 
 // Calculate budget utilization
 export function calculateUtilization(spent: number, allotted: number): {
-  percentage:  number;
+  percentage: number;
   status: 'safe' | 'warning' | 'danger';
   remaining: number;
 } {
   const percentage = allotted > 0 ? (spent / allotted) * 100 : 0;
   const remaining = allotted - spent;
-  
+
   let status: 'safe' | 'warning' | 'danger';
   if (percentage >= 100) {
     status = 'danger';
@@ -89,12 +97,12 @@ export function calculateUtilization(spent: number, allotted: number): {
   } else {
     status = 'safe';
   }
-  
+
   return { percentage, status, remaining };
 }
 
 // Slugify string
-export function slugify(str:  string): string {
+export function slugify(str: string): string {
   return str
     .toLowerCase()
     .replace(/[^\w\s-]/g, '')

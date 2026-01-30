@@ -17,10 +17,21 @@ export async function GET(request: NextRequest) {
     const source = url.searchParams.get('source');
     const period = url.searchParams.get('period');
     const fiscalYear = url.searchParams.get('fiscal_year');
+    const startDate = url.searchParams.get('start_date');
+    const endDate = url.searchParams.get('end_date');
 
     // Build dynamic filter conditions
     const conditions: string[] = [];
     const now = new Date();
+
+    // Custom date range filter (used by semester filter)
+    let customStartDate: Date | null = null;
+    let customEndDate: Date | null = null;
+
+    if (startDate && endDate) {
+      customStartDate = new Date(startDate);
+      customEndDate = new Date(endDate);
+    }
 
     // Period filter
     if (period === 'weekly') {
@@ -188,12 +199,18 @@ export async function GET(request: NextRequest) {
       `;
     }
 
-    // Apply period/fiscal year filter by filtering results
+    // Apply period/fiscal year/custom date filter by filtering results
     let filteredBudgets = budgets;
-    if (conditions.length > 0) {
+    if (conditions.length > 0 || customStartDate || customEndDate) {
       filteredBudgets = budgets.filter((b: any) => {
         let passes = true;
-        
+
+        // Custom date range filter (semester filter)
+        if (customStartDate && customEndDate) {
+          const budgetDate = new Date(b.budget_date);
+          passes = passes && budgetDate >= customStartDate && budgetDate <= customEndDate;
+        }
+
         if (period === 'weekly') {
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           passes = passes && new Date(b.budget_date) >= weekAgo;
@@ -204,11 +221,11 @@ export async function GET(request: NextRequest) {
           const semesterStart = now.getMonth() >= 6 ? new Date(now.getFullYear(), 6, 1) : new Date(now.getFullYear(), 0, 1);
           passes = passes && new Date(b.budget_date) >= semesterStart;
         }
-        
+
         if (fiscalYear) {
           passes = passes && b.fiscal_year === fiscalYear;
         }
-        
+
         return passes;
       });
     }
@@ -216,9 +233,31 @@ export async function GET(request: NextRequest) {
     // Calculate total from filtered budgets
     const total = filteredBudgets.reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0);
 
+    // Calculate remaining for each budget (amount - sum of approved expenses)
+    const budgetIds = filteredBudgets.map((b: any) => b.id);
+    let expensesByBudget: any[] = [];
+
+    if (budgetIds.length > 0) {
+      expensesByBudget = await sql`
+        SELECT budget_id, COALESCE(SUM(amount), 0) as spent
+        FROM expenses_new
+        WHERE budget_id = ANY(${budgetIds})
+          AND status = 'approved'
+        GROUP BY budget_id
+      `;
+    }
+
+    const spentMap = new Map(expensesByBudget.map(e => [e.budget_id, Number(e.spent)]));
+
+    const budgetsWithRemaining = filteredBudgets.map((b: any) => ({
+      ...b,
+      spent: spentMap.get(b.id) || 0,
+      remaining: Number(b.amount) - (spentMap.get(b.id) || 0),
+    }));
+
     return NextResponse.json({
       success: true,
-      data: filteredBudgets,
+      data: budgetsWithRemaining,
       total: total,
     });
   } catch (err) {
@@ -227,21 +266,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request:  NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse. json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     const { name, amount, category_id, description, source, payment_method, budget_date, breakdowns } = body;
 
     if (!name || !amount) {
-      return NextResponse.json({ success: false, error:  'Name and amount are required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Name and amount are required' }, { status: 400 });
     }
 
-    const fiscalYear = getFiscalYear(budget_date ?  new Date(budget_date) : new Date());
+    const fiscalYear = getFiscalYear(budget_date ? new Date(budget_date) : new Date());
 
     const result = await sql`
       INSERT INTO budgets (department_id, category_id, name, amount, description, source, payment_method, budget_date, fiscal_year, created_by)
@@ -260,14 +299,14 @@ export async function POST(request:  NextRequest) {
       RETURNING *
     `;
 
-    const budgetId = result[0]. id;
+    const budgetId = result[0].id;
 
     if (breakdowns && Array.isArray(breakdowns) && breakdowns.length > 0) {
       for (const bd of breakdowns) {
         if (bd.name && bd.amount) {
           await sql`
             INSERT INTO budget_breakdowns (budget_id, name, amount, payment_method)
-            VALUES (${budgetId}, ${bd. name}, ${parseFloat(bd.amount)}, ${bd.payment_method || 'cash'})
+            VALUES (${budgetId}, ${bd.name}, ${parseFloat(bd.amount)}, ${bd.payment_method || 'cash'})
           `;
         }
       }
@@ -276,7 +315,7 @@ export async function POST(request:  NextRequest) {
     return NextResponse.json({ success: true, data: result[0], message: 'Budget created successfully' });
   } catch (err) {
     console.error('Budgets POST error:', err);
-    return NextResponse. json({ success: false, error: 'Failed to create budget' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to create budget' }, { status: 500 });
   }
 }
 
@@ -291,14 +330,14 @@ export async function PUT(request: NextRequest) {
     const { id, name, amount, category_id, description, source, payment_method, budget_date, breakdowns } = body;
 
     if (!id) {
-      return NextResponse.json({ success: false, error:  'Budget ID is required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Budget ID is required' }, { status: 400 });
     }
 
     const result = await sql`
       UPDATE budgets
       SET 
         name = COALESCE(${name}, name),
-        amount = COALESCE(${amount ?  parseFloat(amount) : null}, amount),
+        amount = COALESCE(${amount ? parseFloat(amount) : null}, amount),
         category_id = ${category_id || null},
         description = COALESCE(${description}, description),
         source = COALESCE(${source}, source),
@@ -309,8 +348,8 @@ export async function PUT(request: NextRequest) {
       RETURNING *
     `;
 
-    if (result. length === 0) {
-      return NextResponse.json({ success: false, error:  'Budget not found' }, { status:  404 });
+    if (result.length === 0) {
+      return NextResponse.json({ success: false, error: 'Budget not found' }, { status: 404 });
     }
 
     if (breakdowns && Array.isArray(breakdowns)) {
@@ -332,26 +371,26 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function DELETE(request:  NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse. json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ success: false, error:  'Budget ID is required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Budget ID is required' }, { status: 400 });
     }
 
     await sql`DELETE FROM budgets WHERE id = ${parseInt(id)} AND department_id = ${user.department_id}`;
 
     return NextResponse.json({ success: true, message: 'Budget deleted successfully' });
   } catch (err) {
-    console. error('Budgets DELETE error:', err);
-    return NextResponse.json({ success: false, error: 'Failed to delete budget' }, { status:  500 });
+    console.error('Budgets DELETE error:', err);
+    return NextResponse.json({ success: false, error: 'Failed to delete budget' }, { status: 500 });
   }
 }
 

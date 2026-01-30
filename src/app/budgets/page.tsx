@@ -38,10 +38,18 @@ interface Category {
   name: string;
 }
 
+interface Semester {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
 export default function BudgetsPage() {
   const { user } = useAuth();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [semesters, setSemesters] = useState<Semester[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +59,7 @@ export default function BudgetsPage() {
     category_id: '',
     source: '',
     fiscal_year: getCurrentFiscalYear(),
+    semester_id: '',
   });
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -83,6 +92,12 @@ export default function BudgetsPage() {
       if (filters.source) url += `source=${encodeURIComponent(filters.source)}&`;
       if (filters.period) url += `period=${filters.period}&`;
       if (filters.fiscal_year) url += `fiscal_year=${filters.fiscal_year}&`;
+      if (filters.semester_id) {
+        const semester = semesters.find(s => s.id === parseInt(filters.semester_id));
+        if (semester) {
+          url += `start_date=${semester.start_date}&end_date=${semester.end_date}&`;
+        }
+      }
 
       const response = await fetch(url, { credentials: 'include' });
       const result = await response.json();
@@ -109,9 +124,22 @@ export default function BudgetsPage() {
     }
   };
 
+  const fetchSemesters = async () => {
+    try {
+      const response = await fetch('/api/semesters', { credentials: 'include' });
+      const result = await response.json();
+      if (result.success) {
+        setSemesters(result.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch semesters:', err);
+    }
+  };
+
   useEffect(() => {
     fetchBudgets();
     fetchCategories();
+    fetchSemesters();
   }, [filters]);
 
   useEffect(() => {
@@ -435,6 +463,19 @@ export default function BudgetsPage() {
               >
                 {getFiscalYearOptions().map((fy) => (
                   <option key={fy} value={fy}>FY {fy}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Semester</label>
+              <select
+                value={filters.semester_id}
+                onChange={(e) => setFilters({ ...filters, semester_id: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">All Semesters</option>
+                {semesters.map((sem) => (
+                  <option key={sem.id} value={sem.id}>{sem.name}</option>
                 ))}
               </select>
             </div>

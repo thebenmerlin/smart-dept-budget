@@ -1,0 +1,107 @@
+Software Requirement Specification (SRS)
+Department Budget Management & Expense Analytics System
+
+1. Project Title
+
+Smart Department Budget Management & Expense Analytics System
+
+2. Duration
+
+45 Days (Internship Project)
+
+3. Problem Context
+
+Academic departments in engineering colleges face difficulty in managing and tracking annual budgets across multiple activities such as infrastructure upgrades, hardware/software purchases, technical events, workshops, FDPs, expert sessions, and student activities.
+Traditional spreadsheets and manual record-keeping lead to:
+	•	Lack of transparency and delayed approval cycles
+	•	Missed tracking of activity-wise expenditure
+	•	Difficulty in validating expenses and receipts
+	•	No real-time visibility of remaining funds
+	•	Challenges during audits, accreditation (NBA/NAAC), and departmental finance reviews
+
+There is a need for a centralized digital tool that simplifies budget planning, real-time expense tracking, receipt verification, and data-driven decision-making.
+
+4. Problem Statement
+
+Design and develop a web-based Department Budget Management Tool that enables departments to define annual/semester-wise budget requirements, compare them with actual budget allotments, record expenses category-wise, and upload receipts for verification.
+The system must provide visual dashboards to track monthly, yearly, and activity-wise expenditure, and display the remaining funds at any point.
+
+5. Key Features / Requirements
+
+A. Budget Planning & Allotment
+	•	Input the department’s initial budget proposal for the academic year.
+	•	Enter the actual budget allotted by the institute/governing body.
+	•	Auto-calculate variance (shortfall/excess).
+
+B. Expense Categories to Manage
+
+System must support expenses for:
+	•	Infrastructure (lab setup, repairs, furniture)
+	•	Hardware purchases
+	•	Software purchases/licenses/subscriptions
+	•	Workshops, FDPs, seminars
+	•	Expert talks / industry sessions honorarium
+	•	Sponsorships & expenses for technical fests / departmental events
+	•	Stationary, printing, miscellaneous academic needs
+	•	Student activities and competition support
+
+C. Expense Entry & Verification
+	•	Add expense details:
+	•	Category, amount, date, description
+	•	Vendor details
+	•	Activity/event/asset associated
+	•	Upload receipts/bills in PDF/JPEG/PNG format
+	•	Approver/Verifier workflow (optional):
+	•	Department coordinator → HOD 
+
+D. Real-Time Budget Tracking
+	•	Display remaining balance category-wise and overall
+	•	Compare planned vs actual vs spent
+	•	Alerts for overspending or nearing budget limits
+
+E. Dashboard & Analytics
+
+Interactive dashboard showing:
+	•	Monthly expenses trend (bar/line chart)
+	•	Yearly budget utilization progress (progress bars / donut charts)
+	•	Category-wise breakdown (pie chart)
+	•	Event/activity-wise spend analysis
+	•	Downloadable reports (PDF/Excel)
+
+F. Additional Functionalities
+	•	Role-based access (Admin / HOD / Staff)
+	•	Export summary for NBA/NAAC documentation
+	•	Maintain log history for audits
+	•	Cloud storage for receipts
+	•	Filters by date, category, event, vendor
+
+6. Expected Outcomes
+
+By the end of 45 days, the intern should deliver:
+	1.	Fully functional web application 
+	2.	Database schema for budget, expenses, and receipts
+	3.	Dashboard with charts & analytics
+	4.	Receipt upload module
+	5.	Budget variance reporting
+	6.	Documentation:
+	•	SRS
+	•	Architecture document
+	•	UI mockups
+	•	User manual
+	•	API documentation (if applicable)
+
+7. Stakeholders
+	•	Head of Department
+	•	Department Budget Coordinator
+	•	ACBS Coordinator
+
+8. Impact
+
+The system will:
+	•	Reduce manual workload by 50–70%
+	•	Improve transparency and accuracy in budgeting
+	•	Provide audit-ready records
+	•	Help departments make informed spending decisions
+	•	Support accreditation and compliance reporting
+
+9. Deliverables Format for Internship Report

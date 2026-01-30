@@ -17,10 +17,21 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get('status');
     const period = url.searchParams.get('period');
     const budgetId = url.searchParams.get('budget_id');
+    const startDate = url.searchParams.get('start_date');
+    const endDate = url.searchParams.get('end_date');
 
     // Build period filter dates
     const now = new Date();
     let periodStartDate: Date | null = null;
+
+    // Custom date range filter (used by semester filter)
+    let customStartDate: Date | null = null;
+    let customEndDate: Date | null = null;
+
+    if (startDate && endDate) {
+      customStartDate = new Date(startDate);
+      customEndDate = new Date(endDate);
+    }
 
     if (period === 'weekly') {
       periodStartDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -257,11 +268,24 @@ export async function GET(request: NextRequest) {
       `;
     }
 
-    // Apply period filter by filtering results
+    // Apply period and custom date filter by filtering results
     let filteredExpenses = expenses;
-    if (periodStartDate) {
+    if (periodStartDate || customStartDate) {
       filteredExpenses = expenses.filter((e: any) => {
-        return new Date(e.expense_date) >= periodStartDate!;
+        let passes = true;
+        const expenseDate = new Date(e.expense_date);
+
+        // Custom date range filter (semester filter)
+        if (customStartDate && customEndDate) {
+          passes = passes && expenseDate >= customStartDate && expenseDate <= customEndDate;
+        }
+
+        // Period filter
+        if (periodStartDate) {
+          passes = passes && expenseDate >= periodStartDate!;
+        }
+
+        return passes;
       });
     }
 
@@ -360,8 +384,8 @@ export async function PUT(request: NextRequest) {
       SET 
         name = COALESCE(${name}, name),
         amount = COALESCE(${amount ? parseFloat(amount) : null}, amount),
-        budget_id = ${budget_id || null},
-        category_id = ${category_id || null},
+        budget_id = COALESCE(${budget_id !== undefined ? budget_id : null}, budget_id),
+        category_id = COALESCE(${category_id !== undefined ? category_id : null}, category_id),
         description = COALESCE(${description}, description),
         spender = COALESCE(${spender}, spender),
         payment_method = COALESCE(${payment_method}, payment_method),

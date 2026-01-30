@@ -214,7 +214,7 @@ export async function generateBudgetReportPDF(
     page.drawText('Prepared By:', { x: 50, y, size: 9, font: fontRegular });
     page.drawLine({ start: { x: 50, y: y - 35 }, end: { x: 180, y: y - 35 }, thickness: 0.5, color: rgb(0, 0, 0) });
     page.drawText(options.generatedBy, { x: 50, y: y - 48, size: 9, font: fontBold });
-    page.drawText('Staff Member', { x: 50, y: y - 60, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText('Head of Department', { x: 50, y: y - 60, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4) });
 
     // Approved By HOD
     page.drawText('Approved By:', { x: 380, y, size: 9, font: fontRegular });
@@ -377,7 +377,7 @@ export async function generateExpenseReportPDF(
     page.drawText('Prepared By:', { x: 50, y, size: 9, font: fontRegular });
     page.drawLine({ start: { x: 50, y: y - 35 }, end: { x: 180, y: y - 35 }, thickness: 0.5, color: rgb(0, 0, 0) });
     page.drawText(options.generatedBy, { x: 50, y: y - 48, size: 9, font: fontBold });
-    page.drawText('Staff Member', { x: 50, y: y - 60, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText('Head of Department', { x: 50, y: y - 60, size: 8, font: fontRegular, color: rgb(0.4, 0.4, 0.4) });
 
     // Approved By HOD
     page.drawText('Approved By:', { x: 380, y, size: 9, font: fontRegular });
